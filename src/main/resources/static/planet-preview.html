@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>星球风格试衣间</title>
+<style>
+    body { background: linear-gradient(180deg,#0b1029,#0a0e23); color:#e9edff; font-family:-apple-system,"PingFang SC",sans-serif; padding:30px; }
+    h1 { font-size:20px; margin-bottom:6px; }
+    .sub { color:#8b94c6; font-size:13px; margin-bottom:24px; }
+    .grid { display:grid; grid-template-columns:repeat(3,300px); gap:26px 40px; justify-content:center; }
+    .cell { text-align:center; }
+    .cell .box { width:280px; height:280px; margin:0 auto; display:flex; align-items:center; justify-content:center; }
+    .cell .name { margin-top:8px; font-size:14px; font-weight:700; }
+    .cell .desc { color:#8b94c6; font-size:11.5px; margin-top:3px; }
+    .style-head { grid-column:span 3; font-size:16px; font-weight:800; border-bottom:1px solid rgba(120,140,220,.25); padding:18px 0 8px; }
+    .style-head small { color:#8b94c6; font-weight:400; margin-left:10px; }
+    svg, canvas { display:block; }
+    canvas { image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<h1>🪐 星球风格试衣间</h1>
+<p class="sub">同一颗星球的多种画风。告诉 Claude 你喜欢哪一种（A / B / C / D），以及想调整什么。</p>
+<div class="grid" id="grid"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="/planet3d.js"></script>
+<script>
+/* ============ 风格 A：精修扁平插画（硬边阴影 + 手绘大陆） ============ */
+function flatPlanet(tier) {
+    const P = {
+        4: { c1:'#ffb27a', c2:'#e06a3a', c3:'#8a3416', land:'#9c3f1d', land2:'#7a2c10', glow:'#ff9f6e', deco:'lava' },
+        5: { c1:'#7fd0f5', c2:'#3d95dd', c3:'#1c56a0', land:'#4fc487', land2:'#379a66', glow:'#7fd0f5', deco:'clouds' },
+        6: { c1:'#8fd8f2', c2:'#3f9de0', c3:'#1c5fa8', land:'#55c97e', land2:'#3aa25f', glow:'#7bed9f', deco:'ring' }
+    }[tier];
+    const blob1 = "M-62,-14 C-48,-46 -8,-58 22,-44 C52,-52 78,-32 70,-6 C88,10 76,40 46,44 C36,64 -2,68 -22,52 C-52,60 -74,38 -66,14 C-80,0 -76,-8 -62,-14 Z";
+    const blob2 = "M-30,-12 C-18,-30 12,-34 26,-20 C44,-24 56,-8 48,6 C54,20 40,32 22,28 C12,40 -12,40 -20,26 C-38,28 -46,8 -30,-12 Z";
+    const blob3 = "M-22,-8 C-14,-22 8,-24 18,-14 C32,-16 38,-4 32,6 C36,16 24,24 12,20 C2,28 -14,24 -18,12 C-30,10 -32,0 -22,-8 Z";
+    return `
+<svg viewBox="0 0 440 440" width="280" height="280">
+  <defs>
+    <radialGradient id="fa-base-${tier}" cx="36%" cy="32%" r="78%">
+      <stop offset="0%" stop-color="${P.c1}"/><stop offset="58%" stop-color="${P.c2}"/><stop offset="100%" stop-color="${P.c3}"/>
+    </radialGradient>
+    <clipPath id="fa-clip-${tier}"><circle cx="220" cy="220" r="165"/></clipPath>
+    <filter id="fa-blur1"><feGaussianBlur stdDeviation="2"/></filter>
+  </defs>
+  <circle cx="220" cy="220" r="176" fill="none" stroke="${P.glow}" stroke-opacity=".28" stroke-width="10"/>
+  <circle cx="220" cy="220" r="184" fill="none" stroke="${P.glow}" stroke-opacity=".10" stroke-width="8"/>
+  ${P.deco === 'ring' ? `<path d="M28,262 A 200 54 -14 0 1 412 184" fill="none" stroke="rgba(233,237,255,.30)" stroke-width="10" stroke-linecap="round"/>` : ''}
+  <g clip-path="url(#fa-clip-${tier})">
+    <circle cx="220" cy="220" r="165" fill="url(#fa-base-${tier})"/>
+    <g transform="translate(168,180) scale(1.05)"><path d="${blob1}" fill="${P.land}"/></g>
+    <g transform="translate(168,186) scale(1.05)"><path d="${blob1}" fill="${P.land2}" opacity=".45" transform="translate(0,7) scale(.98)"/></g>
+    <g transform="translate(300,286) scale(.9) rotate(15)"><path d="${blob2}" fill="${P.land}"/></g>
+    <g transform="translate(296,130) scale(.8) rotate(-12)"><path d="${blob3}" fill="${P.land}"/></g>
+    ${P.deco === 'lava' ? `
+      <g stroke="#ffd166" stroke-width="3" fill="none" stroke-linecap="round" opacity=".9">
+        <path d="M130,250 L165,258 L182,284 L220,290"/><path d="M262,132 L254,166 L282,186"/>
+      </g>` : ''}
+    ${P.deco !== 'lava' ? `
+      <ellipse cx="220" cy="78" rx="70" ry="20" fill="rgba(255,255,255,.85)"/>
+      <ellipse cx="220" cy="366" rx="76" ry="22" fill="rgba(255,255,255,.7)"/>
+      <g fill="rgba(255,255,255,.9)">
+        <path d="M120,160 q14,-16 34,-8 q10,-12 28,-6 q14,4 10,16 q-40,8 -72,-2 Z"/>
+        <path d="M266,236 q12,-14 30,-7 q9,-10 24,-5 q12,3 9,14 q-34,7 -63,-2 Z"/>
+      </g>` : ''}
+    <!-- 硬边月牙阴影（灵魂） -->
+    <circle cx="298" cy="296" r="230" fill="rgba(8,10,30,.34)" filter="url(#fa-blur1)"/>
+    <ellipse cx="152" cy="140" rx="66" ry="42" fill="rgba(255,255,255,.20)" filter="url(#fa-blur1)"/>
+  </g>
+  <circle cx="220" cy="220" r="164" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="2.5"/>
+  ${P.deco === 'ring' ? `<path d="M28,262 A 200 54 -14 0 0 412 184" fill="none" stroke="rgba(233,237,255,.55)" stroke-width="10" stroke-linecap="round"/>` : ''}
+</svg>`;
+}
+
+/* ============ 风格 B：程序化噪声地形（feTurbulence，更接近真实星球） ============ */
+function noisePlanet(tier) {
+    const P = {
+        4: { sea:'#5c2010', seaTop:'#a03c1a', land:'#ff9448', land2:'#ffd166', glow:'#ff9f6e', freq:'0.011', seed:11 },
+        5: { sea:'#0e3a74', seaTop:'#2f85d6', land:'#3fae72', land2:'#8fd8a0', glow:'#6edcff', freq:'0.009', seed:7 },
+        6: { sea:'#124078', seaTop:'#3a92dc', land:'#46b877', land2:'#a4e29a', glow:'#7bed9f', freq:'0.010', seed:3 }
+    }[tier];
+    return `
+<svg viewBox="0 0 440 440" width="280" height="280">
+  <defs>
+    <radialGradient id="nb-sea-${tier}" cx="36%" cy="32%" r="80%">
+      <stop offset="0%" stop-color="${P.seaTop}"/><stop offset="100%" stop-color="${P.sea}"/>
+    </radialGradient>
+    <clipPath id="nb-clip-${tier}"><circle cx="220" cy="220" r="165"/></clipPath>
+    <filter id="nb-land-${tier}" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="${P.freq}" numOctaves="5" seed="${P.seed}" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  14 14 14 0 -19.2" result="m"/>
+      <feComposite operator="in" in="SourceGraphic" in2="m"/>
+    </filter>
+    <filter id="nb-land2-${tier}" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="${P.freq}" numOctaves="5" seed="${P.seed}" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  14 14 14 0 -20.4" result="m"/>
+      <feComposite operator="in" in="SourceGraphic" in2="m"/>
+    </filter>
+    <filter id="nb-soft"><feGaussianBlur stdDeviation="10"/></filter>
+  </defs>
+  <circle cx="220" cy="220" r="178" fill="none" stroke="${P.glow}" stroke-opacity=".25" stroke-width="12"/>
+  <g clip-path="url(#nb-clip-${tier})">
+    <circle cx="220" cy="220" r="165" fill="url(#nb-sea-${tier})"/>
+    <rect x="40" y="40" width="360" height="360" fill="${P.land}" filter="url(#nb-land-${tier})"/>
+    <rect x="40" y="40" width="360" height="360" fill="${P.land2}" filter="url(#nb-land2-${tier})" opacity=".85"/>
+    <ellipse cx="220" cy="62" rx="90" ry="26" fill="rgba(255,255,255,.75)" filter="url(#nb-soft)"/>
+    <ellipse cx="308" cy="308" rx="230" ry="200" fill="rgba(6,8,24,.5)" filter="url(#nb-soft)"/>
+    <ellipse cx="150" cy="138" rx="95" ry="70" fill="rgba(255,255,255,.15)" filter="url(#nb-soft)"/>
+  </g>
+  <circle cx="220" cy="220" r="164" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+</svg>`;
+}
+
+/* ============ 风格 C：像素风（canvas 程序化生成） ============ */
+function hashNoise(x, y, seed) {
+    let n = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453;
+    return n - Math.floor(n);
+}
+function valueNoise(x, y, seed) {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const xf = x - xi, yf = y - yi;
+    const s = t => t * t * (3 - 2 * t);
+    const a = hashNoise(xi, yi, seed), b = hashNoise(xi + 1, yi, seed);
+    const c = hashNoise(xi, yi + 1, seed), d = hashNoise(xi + 1, yi + 1, seed);
+    return a + (b - a) * s(xf) + (c - a) * s(yf) + (a - b - c + d) * s(xf) * s(yf);
+}
+function fbm(x, y, seed) {
+    return valueNoise(x, y, seed) * .55 + valueNoise(x * 2, y * 2, seed + 5) * .3 + valueNoise(x * 4, y * 4, seed + 9) * .15;
+}
+function pixelPlanet(canvas, tier) {
+    const PAL = {
+        4: { bands: [[.52,'#4a1607'],[.58,'#7a2c10'],[.66,'#b34818'],[.75,'#e06a3a'],[1,'#ffd166']], sky:'#ff9f6e', seed:11 },
+        5: { bands: [[.5,'#123a6e'],[.58,'#1d5fae'],[.64,'#2f85d6'],[.68,'#e8dfb8'],[.78,'#3fae72'],[1,'#2c7d52']], sky:'#6edcff', seed:7 },
+        6: { bands: [[.48,'#134078'],[.56,'#2470bd'],[.62,'#3a92dc'],[.66,'#e8dfb8'],[.8,'#46b877'],[1,'#2e8f58']], sky:'#7bed9f', seed:3 }
+    }[tier];
+    const N = 88, S = canvas.width / N;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const R = N / 2 - 3, cx = N / 2, cy = N / 2;
+    for (let py = 0; py < N; py++) {
+        for (let px = 0; px < N; px++) {
+            const dx = px - cx, dy = py - cy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > R) continue;
+            // 球面映射的噪声采样
+            const z = Math.sqrt(Math.max(0, R * R - dx * dx - dy * dy));
+            let n = fbm((dx / R + 1) * 2.6, (dy / R + 1) * 2.6, PAL.seed);
+            // 光照：左上光源
+            const light = (-dx * .55 - dy * .55 + z) / R;
+            let color = PAL.bands[PAL.bands.length - 1][1];
+            for (const [t, c] of PAL.bands) { if (n <= t) { color = c; break; } }
+            ctx.fillStyle = color;
+            ctx.fillRect(px * S, py * S, S, S);
+            // 明暗：暗面加半透明遮罩（抖动过渡）
+            if (light < .42) {
+                const dither = (px + py) % 2 === 0;
+                const deep = light < .22 || dither;
+                if (deep) { ctx.fillStyle = 'rgba(8,10,30,' + (light < .22 ? .5 : .3) + ')'; ctx.fillRect(px * S, py * S, S, S); }
+            } else if (light > 1.15 && (px + py) % 2 === 0) {
+                ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(px * S, py * S, S, S);
+            }
+        }
+    }
+    // 大气描边
+    ctx.strokeStyle = PAL.sky; ctx.globalAlpha = .5; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx * S, cy * S, (R + 1.5) * S, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+}
+
+/* ============ 渲染页面 ============ */
+const ONLY_D = location.search.includes('only=d');
+const TIER_NAMES = { 4: '岩浆行星', 5: '海洋行星', 6: '翠绿行星（带环）' };
+const grid = document.getElementById('grid');
+function addHead(txt, desc) {
+    const d = document.createElement('div');
+    d.className = 'style-head';
+    d.innerHTML = txt + '<small>' + desc + '</small>';
+    grid.appendChild(d);
+}
+function addCell(html, name) {
+    const d = document.createElement('div');
+    d.className = 'cell';
+    d.innerHTML = '<div class="box">' + html + '</div><div class="name">' + name + '</div>';
+    grid.appendChild(d);
+    return d;
+}
+if (!ONLY_D) {
+    addHead('风格 A · 精修扁平插画', '干净大色块 + 硬边月牙阴影 + 手绘大陆（Kurzgesagt 科普动画风）');
+    [4, 5, 6].forEach(t => addCell(flatPlanet(t), TIER_NAMES[t]));
+    addHead('风格 B · 程序化噪声地形', '真实感大陆边缘（每颗星球地形独一无二）');
+    [4, 5, 6].forEach(t => addCell(noisePlanet(t), TIER_NAMES[t]));
+    addHead('风格 C · 像素风', '复古游戏感，自带抖动光影（Stardew/像素游戏风）');
+    [4, 5, 6].forEach(t => {
+        const d = addCell('<canvas width="264" height="264"></canvas>', TIER_NAMES[t]);
+        pixelPlanet(d.querySelector('canvas'), t);
+    });
+}
+
+/* ============ 风格 D：Three.js 真 3D 星球（可拖动旋转） ============ */
+function hash3(x, y, z, seed) {
+    const n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + seed * 269.5) * 43758.5453;
+    return n - Math.floor(n);
+}
+function vnoise3(x, y, z, seed) {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+    const xf = x - xi, yf = y - yi, zf = z - zi;
+    const s = t => t * t * (3 - 2 * t);
+    const u = s(xf), v = s(yf), w = s(zf);
+    let acc = 0;
+    for (let dz = 0; dz <= 1; dz++) for (let dy = 0; dy <= 1; dy++) for (let dx = 0; dx <= 1; dx++) {
+        const h = hash3(xi + dx, yi + dy, zi + dz, seed);
+        acc += h * (dx ? u : 1 - u) * (dy ? v : 1 - v) * (dz ? w : 1 - w);
+    }
+    return acc;
+}
+function fbm3(x, y, z, seed) {
+    return vnoise3(x, y, z, seed) * .5 + vnoise3(x * 2, y * 2, z * 2, seed + 5) * .28 +
+           vnoise3(x * 4, y * 4, z * 4, seed + 9) * .14 + vnoise3(x * 8, y * 8, z * 8, seed + 13) * .08;
+}
+const D_PAL = {
+    4: { bands: [[.5,'#3c1206'],[.56,'#6e2a12'],[.63,'#a8431c'],[.72,'#d05f35'],[1,'#ffb27a']], sea:.5, glow:0xff9f6e, caps:false, seed:11, spec:false },
+    5: { bands: [[.5,'#0c3468'],[.56,'#155095'],[.62,'#2f85d6'],[.655,'#dfd6a8'],[.75,'#3fae72'],[1,'#2c7d52']], sea:.62, glow:0x6edcff, caps:true, seed:7, spec:true },
+    6: { bands: [[.46,'#11406f'],[.54,'#2470bd'],[.60,'#3a92dc'],[.635,'#dfd6a8'],[.78,'#46b877'],[1,'#2e8f58']], sea:.60, glow:0x7bed9f, caps:true, seed:3, spec:true, ring:true }
+};
+function genMaps(tier) {
+    const P = D_PAL[tier];
+    const W = 512, H = 256;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const s = document.createElement('canvas'); s.width = W; s.height = H;
+    const cx = c.getContext('2d'), sx = s.getContext('2d');
+    const img = cx.createImageData(W, H), simg = sx.createImageData(W, H);
+    for (let py = 0; py < H; py++) {
+        const lat = (py / H - .5) * Math.PI;
+        for (let px = 0; px < W; px++) {
+            const lon = px / W * Math.PI * 2;
+            const nx = Math.cos(lat) * Math.cos(lon), ny = Math.sin(lat), nz = Math.cos(lat) * Math.sin(lon);
+            let n = fbm3(nx * 2.1 + 9, ny * 2.1 + 9, nz * 2.1 + 9, P.seed);
+            let color = P.bands[P.bands.length - 1][1];
+            for (const [t, col] of P.bands) { if (n <= t) { color = col; break; } }
+            let r = parseInt(color.slice(1, 3), 16), g = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
+            // 细节噪声让表面不呆板
+            const d = (fbm3(nx * 7 + 30, ny * 7 + 30, nz * 7 + 30, P.seed + 21) - .5) * 34;
+            r = Math.max(0, Math.min(255, r + d)); g = Math.max(0, Math.min(255, g + d)); b = Math.max(0, Math.min(255, b + d));
+            // 极地冰盖
+            if (P.caps && Math.abs(ny) > .78) {
+                const t = Math.min(1, (Math.abs(ny) - .78) / .12);
+                r = r + (245 - r) * t; g = g + (250 - g) * t; b = b + (252 - b) * t;
+            }
+            const i = (py * W + px) * 4;
+            img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
+            const sv = (P.spec && n < P.sea) ? 200 : 15;
+            simg.data[i] = sv; simg.data[i + 1] = sv; simg.data[i + 2] = sv; simg.data[i + 3] = 255;
+        }
+    }
+    cx.putImageData(img, 0, 0); sx.putImageData(simg, 0, 0);
+    return { map: c, spec: s };
+}
+function genClouds(seed) {
+    const W = 512, H = 256;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const cx = c.getContext('2d');
+    const img = cx.createImageData(W, H);
+    for (let py = 0; py < H; py++) {
+        const lat = (py / H - .5) * Math.PI;
+        for (let px = 0; px < W; px++) {
+            const lon = px / W * Math.PI * 2;
+            const nx = Math.cos(lat) * Math.cos(lon), ny = Math.sin(lat), nz = Math.cos(lat) * Math.sin(lon);
+            const n = fbm3(nx * 3.4 + 50, ny * 3.4 + 50, nz * 3.4 + 50, seed + 77);
+            const a = Math.max(0, (n - .58)) * 5.2;
+            const i = (py * W + px) * 4;
+            img.data[i] = 255; img.data[i + 1] = 255; img.data[i + 2] = 255;
+            img.data[i + 3] = Math.min(230, a * 255);
+        }
+    }
+    cx.putImageData(img, 0, 0);
+    return c;
+}
+function planet3D(container, tier, size) {
+    const P = D_PAL[tier];
+    size = size || 280;
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(size, size);
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    container.appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(38, 1, .1, 100);
+    camera.position.set(0, 0, 5.4);
+
+    const maps = genMaps(tier);
+    const tex = new THREE.CanvasTexture(maps.map);
+    const spec = new THREE.CanvasTexture(maps.spec);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.MeshPhongMaterial({ map: tex, specularMap: spec, specular: 0x99ccee, shininess: 18 });
+    if (tier === 4) { // 岩浆自发光
+        mat.emissiveMap = tex;
+        mat.emissive = new THREE.Color(0xff6a30);
+        mat.emissiveIntensity = .5;
+    }
+    const planet = new THREE.Mesh(new THREE.SphereGeometry(1.62, 96, 96), mat);
+    scene.add(planet);
+
+    // 云层
+    if (tier !== 4) {
+        const clouds = new THREE.Mesh(
+            new THREE.SphereGeometry(1.655, 64, 64),
+            new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(genClouds(P.seed)), transparent: true, depthWrite: false })
+        );
+        planet.userData.clouds = clouds;
+        scene.add(clouds);
+    }
+
+    // 大气辉光（fresnel，背面渲染）
+    const glowColor = new THREE.Color(P.glow);
+    const atmo = new THREE.Mesh(
+        new THREE.SphereGeometry(1.98, 64, 64),
+        new THREE.ShaderMaterial({
+            uniforms: { c: { value: glowColor } },
+            vertexShader: 'varying vec3 vN; void main(){ vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+            fragmentShader: 'uniform vec3 c; varying vec3 vN; void main(){ float i = pow(0.62 - dot(vN, vec3(0,0,1.0)), 3.2); gl_FragColor = vec4(c, 1.0) * i * 1.6; }',
+            side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false
+        })
+    );
+    scene.add(atmo);
+
+    // 星环（径向渐变贴图，匹配 RingGeometry 的平面 UV）
+    if (P.ring) {
+        const rc = document.createElement('canvas'); rc.width = 256; rc.height = 256;
+        const rg = rc.getContext('2d');
+        const grad = rg.createRadialGradient(128, 128, 80, 128, 128, 128);
+        grad.addColorStop(0, 'rgba(233,237,255,0)');
+        grad.addColorStop(.18, 'rgba(233,237,255,.9)');
+        grad.addColorStop(.42, 'rgba(170,195,255,.28)');
+        grad.addColorStop(.62, 'rgba(233,237,255,.8)');
+        grad.addColorStop(.82, 'rgba(190,210,255,.4)');
+        grad.addColorStop(1, 'rgba(233,237,255,0)');
+        rg.fillStyle = grad; rg.fillRect(0, 0, 256, 256);
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(2.15, 3.15, 128),
+            new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(rc), side: THREE.DoubleSide, transparent: true, opacity: .95, depthWrite: false })
+        );
+        ring.rotation.x = Math.PI / 2.55;
+        ring.rotation.y = -.16;
+        scene.add(ring);
+    }
+
+    scene.add(new THREE.AmbientLight(0x8890c0, .9));
+    const sun = new THREE.DirectionalLight(0xffffff, 3.2);
+    sun.position.set(-3.5, 2.4, 3.2);
+    scene.add(sun);
+
+    // 拖动旋转
+    let vx = .0035, dragging = false, lx = 0;
+    renderer.domElement.style.cursor = 'grab';
+    renderer.domElement.addEventListener('pointerdown', e => { dragging = true; lx = e.clientX; });
+    window.addEventListener('pointermove', e => { if (dragging) { vx = (e.clientX - lx) * .0004 + .001; lx = e.clientX; } });
+    window.addEventListener('pointerup', () => dragging = false);
+
+    (function loop() {
+        requestAnimationFrame(loop);
+        planet.rotation.y += vx;
+        if (!dragging) vx += (.0035 - vx) * .02;
+        if (planet.userData.clouds) planet.userData.clouds.rotation.y += vx * 1.35;
+        renderer.render(scene, camera);
+    })();
+}
+addHead('风格 D · Three.js 真 3D 星球', '实时渲染 · 程序化地形 · 云层 · 大气辉光 · 鼠标可拖动旋转');
+[4, 5, 6].forEach(t => {
+    const d = addCell('', TIER_NAMES[t]);
+    if (ONLY_D) { d.querySelector('.box').style.width = d.querySelector('.box').style.height = '340px'; }
+    planet3D(d.querySelector('.box'), t, ONLY_D ? 340 : 280);
+});
+
+/* ============ 全部 8 个进化阶段（正式版 planet3d.js 模块渲染） ============ */
+const ALL_TIERS = ['星尘', '陨石', '小行星', '岩浆行星', '海洋行星', '翠绿行星', '文明行星', '恒星'];
+addHead('主页正式版 · 8 个进化阶段', '与主页完全一致的渲染（planet3d.js）');
+ALL_TIERS.forEach((name, i) => {
+    const d = addCell('', 'T' + (i + 1) + ' · ' + name);
+    Planet3D.mount(d.querySelector('.box'), { size: 280, tier: i + 1 });
+});
+</script>
+</body>
+</html>

@@ -115,13 +115,12 @@ body.auth-body { overflow: auto; }
 }
 .planet-stage.warping { opacity: 0; transform: translate(-50%, -50%) scale(.6); }
 
-/* ===== SVG 星球 ===== */
-.planet-svg {
+/* ===== 3D 星球 ===== */
+.planet3d-wrap {
     position: absolute;
     left: 50%; top: 50%;
-    width: 460px; height: 460px;
+    width: 470px; height: 470px;
     transform: translate(-50%, -50%);
-    cursor: pointer;
     transition: filter 1.2s;
     animation: planetFloat 7s ease-in-out infinite;
 }
@@ -129,23 +128,8 @@ body.auth-body { overflow: auto; }
     0%, 100% { transform: translate(-50%, -50%); }
     50% { transform: translate(-50%, calc(-50% - 9px)); }
 }
-.planet-svg:hover { filter: brightness(1.07); }
-.planet-svg.health-GLOOMY { filter: saturate(.55) brightness(.8); }
-.planet-svg.health-DESERT { filter: saturate(.3) sepia(.45) brightness(.78); }
-/* 云层漂移 */
-.clouds-g { animation: cloudsDriftG 46s ease-in-out infinite alternate; }
-@keyframes cloudsDriftG { from { transform: translateX(-18px); } to { transform: translateX(18px); } }
-/* 文明夜灯闪烁 */
-.city-lights circle { animation: lightTwinkle 2.6s ease-in-out infinite; }
-@keyframes lightTwinkle { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-/* 恒星光芒旋转 + 呼吸 */
-.sun-rays { transform-origin: 220px 220px; animation: raysSpin 70s linear infinite; }
-@keyframes raysSpin { to { transform: rotate(360deg); } }
-.sun-breathe { animation: sunBreathe 3s ease-in-out infinite; }
-@keyframes sunBreathe { 0%, 100% { opacity: .05; } 50% { opacity: .2; } }
-/* 岩浆微光 */
-.lava { animation: lavaGlow 2.4s ease-in-out infinite; }
-@keyframes lavaGlow { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+.planet3d-wrap.health-GLOOMY { filter: saturate(.55) brightness(.8); }
+.planet3d-wrap.health-DESERT { filter: saturate(.3) sepia(.45) brightness(.78); }
 
 /* ===== 建筑 ===== */
 .building {

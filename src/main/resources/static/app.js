@@ -62,31 +62,6 @@ const CAT_BUILDINGS = {
     LIFE: { emojis: ['🚧', '🌱', '🏕️', '🏘️', '🎡'], names: ['生活工地', '菜园', '营地', '街区', '游乐园'] }
 };
 
-// 各阶段星球配色（SVG 渐变）
-const TIER_ART = {
-    1: { c1: '#cdd3e6', c2: '#8790ad', c3: '#454c68', glow: '#aab4d8' },
-    2: { c1: '#c9a98c', c2: '#8a6f57', c3: '#41311f', glow: '#c9a98c' },
-    3: { c1: '#aab9de', c2: '#66779f', c3: '#28355c', glow: '#8fa3d0' },
-    4: { c1: '#ffb27a', c2: '#d05f35', c3: '#5c2010', glow: '#ff9f6e' },
-    5: { c1: '#8fdcf9', c2: '#2f7fd0', c3: '#0e3268', glow: '#6edcff' },
-    6: { c1: '#7fd6f2', c2: '#2f8fd6', c3: '#123c74', glow: '#7bed9f' },
-    7: { c1: '#c3b2fa', c2: '#7a5ce0', c3: '#291a60', glow: '#a78bfa' },
-    8: { c1: '#fff7d6', c2: '#ffd166', c3: '#f08c2e', glow: '#ffd166' }
-};
-// 星尘颗粒 / 陨石坑 / 文明夜灯（固定坐标，避免每次渲染乱跳）
-const DUST_DOTS = [
-    [150, 160, 2.4], [190, 130, 1.6], [240, 150, 2], [285, 190, 1.5], [175, 210, 1.8],
-    [220, 240, 2.6], [270, 250, 1.6], [140, 260, 2], [200, 295, 1.7], [255, 310, 2.2],
-    [300, 270, 1.4], [165, 320, 1.5], [310, 220, 1.9], [130, 210, 1.4], [235, 190, 1.3]
-];
-const CRATERS = [
-    [150, 170, 26], [265, 150, 16], [190, 270, 20], [290, 265, 28], [235, 205, 10], [130, 240, 13]
-];
-const CITY_LIGHTS = [
-    [262, 196], [276, 214], [251, 224], [287, 240], [266, 250], [300, 222],
-    [243, 247], [282, 262], [176, 201], [190, 214], [205, 196], [298, 258]
-];
-
 const QUOTES = [
     '自律不是苦行，是把选择权拿回自己手里',
     '你今天的每一次打卡，都是星球的一次心跳',
@@ -204,18 +179,6 @@ const app = createApp({
         sceneTier() {
             if (this.tierPreview && !this.visiting) return this.tierPreview;
             return this.scenePlanet ? this.tierOf(this.scenePlanet.level) : 1;
-        },
-        tierArt() {
-            return TIER_ART[this.sceneTier];
-        },
-        dustDots() {
-            return DUST_DOTS;
-        },
-        craters() {
-            return CRATERS;
-        },
-        cityLights() {
-            return CITY_LIGHTS;
         },
         sceneHealth() {
             return this.scenePlanet ? this.scenePlanet.health.state : 'FLOURISHING';
@@ -353,6 +316,13 @@ const app = createApp({
         }
     },
 
+    watch: {
+        /** tier 变化（升级/预览/访问搭档）→ 重建 3D 星球 */
+        sceneTier(tier) {
+            if (this._p3d) this._p3d.setTier(tier);
+        }
+    },
+
     methods: {
         // ---- 工具 ----
         tierOf(level) {
@@ -398,6 +368,23 @@ const app = createApp({
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             location.href = '/login.html';
+        },
+
+        // ---- 3D 星球 ----
+        initPlanet3D() {
+            const el = this.$refs.planetMount;
+            if (!el || this._p3d) return;
+            try {
+                this._p3d = Planet3D.mount(el, {
+                    size: 470,
+                    tier: this.sceneTier,
+                    onClick: () => {
+                        if (!this.visiting) this.openPanel('planet');
+                    }
+                });
+            } catch (e) {
+                console.error('3D 星球初始化失败', e);
+            }
         },
 
         // ---- 面板 ----
@@ -805,11 +792,11 @@ const app = createApp({
         } catch (e) {
             console.error(e);
         }
+        this.$nextTick(() => this.initPlanet3D());
         // ESC 关闭面板
         window.addEventListener('keydown', e => {
             if (e.key === 'Escape' && this.panel) this.closePanel();
         });
     }
 });
-app.config.globalProperties.Math = Math; // 模板里画恒星光芒要用
 app.mount('#app');

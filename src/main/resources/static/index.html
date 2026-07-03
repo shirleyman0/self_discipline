@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/style.css">
     <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 </head>
 <body>
 <div id="stars"></div>
@@ -68,163 +69,8 @@
 
         <!-- 星球 + 建筑 -->
         <div class="planet-stage" :class="{warping: warping}">
-            <svg class="planet-svg" :class="'health-' + sceneHealth" viewBox="0 0 440 440"
-                 @click="openPanel('planet')" :title="scenePlanet.planetName">
-                <defs>
-                    <radialGradient id="atmo" cx="50%" cy="50%" r="50%">
-                        <stop offset="72%" stop-color="transparent"/>
-                        <stop offset="88%" :stop-color="tierArt.glow" stop-opacity=".35"/>
-                        <stop offset="100%" stop-color="transparent"/>
-                    </radialGradient>
-                    <radialGradient id="pbase" cx="34%" cy="30%" r="80%">
-                        <stop offset="0%" :stop-color="tierArt.c1"/>
-                        <stop offset="55%" :stop-color="tierArt.c2"/>
-                        <stop offset="100%" :stop-color="tierArt.c3"/>
-                    </radialGradient>
-                    <clipPath id="pclip"><circle cx="220" cy="220" r="170"/></clipPath>
-                    <filter id="soft"><feGaussianBlur stdDeviation="5"/></filter>
-                    <filter id="soft2"><feGaussianBlur stdDeviation="12"/></filter>
-                </defs>
-
-                <!-- 大气辉光 -->
-                <circle cx="220" cy="220" r="218" fill="url(#atmo)"/>
-
-                <!-- 星环（后半，藏在星球后面） -->
-                <g v-if="sceneTier >= 6 && sceneTier <= 7" class="ring-g">
-                    <path d="M40,258 A 195 58 -14 0 1 396 186" fill="none"
-                          stroke="rgba(233,237,255,.34)" stroke-width="9" stroke-linecap="round"/>
-                    <path d="M40,258 A 195 58 -14 0 1 396 186" fill="none"
-                          :stroke="tierArt.glow" stroke-opacity=".25" stroke-width="17" stroke-linecap="round"/>
-                </g>
-
-                <!-- 恒星光芒 -->
-                <g v-if="sceneTier === 8" class="sun-rays">
-                    <line v-for="i in 12" :key="i" x1="220" y1="220"
-                          :x2="220 + 212 * Math.cos(i * Math.PI / 6)"
-                          :y2="220 + 212 * Math.sin(i * Math.PI / 6)"
-                          stroke="rgba(255,209,102,.5)" stroke-width="3" stroke-linecap="round"
-                          stroke-dasharray="0 176 26 40"/>
-                </g>
-
-                <!-- 星球本体 -->
-                <g clip-path="url(#pclip)">
-                    <circle cx="220" cy="220" r="170" fill="url(#pbase)"/>
-
-                    <!-- t1 星尘：漂浮颗粒 -->
-                    <g v-if="sceneTier === 1" opacity=".8">
-                        <circle v-for="(p, i) in dustDots" :key="i" :cx="p[0]" :cy="p[1]" :r="p[2]"
-                                fill="rgba(255,255,255,.5)"/>
-                        <ellipse cx="170" cy="190" rx="70" ry="46" fill="rgba(255,255,255,.08)" filter="url(#soft2)"/>
-                        <ellipse cx="270" cy="270" rx="80" ry="52" fill="rgba(0,0,0,.16)" filter="url(#soft2)"/>
-                    </g>
-
-                    <!-- t2/t3 陨石坑 -->
-                    <g v-if="sceneTier === 2 || sceneTier === 3">
-                        <g v-for="(c, i) in craters" :key="i">
-                            <circle :cx="c[0]" :cy="c[1]" :r="c[2]" fill="rgba(0,0,0,.22)"/>
-                            <circle :cx="c[0] - c[2] * .18" :cy="c[1] - c[2] * .18" :r="c[2] * .82"
-                                    fill="rgba(255,255,255,.07)"/>
-                            <circle :cx="c[0] + c[2] * .1" :cy="c[1] + c[2] * .1" :r="c[2] * .62"
-                                    fill="rgba(0,0,0,.18)"/>
-                        </g>
-                        <ellipse cx="160" cy="300" rx="90" ry="40" fill="rgba(0,0,0,.14)" filter="url(#soft2)"/>
-                    </g>
-
-                    <!-- t4 岩浆行星：暗斑 + 岩浆裂纹 -->
-                    <g v-if="sceneTier === 4">
-                        <ellipse cx="150" cy="170" rx="72" ry="50" fill="rgba(60,16,4,.4)" filter="url(#soft)"/>
-                        <ellipse cx="290" cy="290" rx="86" ry="58" fill="rgba(60,16,4,.45)" filter="url(#soft)"/>
-                        <ellipse cx="280" cy="140" rx="46" ry="30" fill="rgba(60,16,4,.3)" filter="url(#soft)"/>
-                        <g stroke="#ffd166" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".85" class="lava">
-                            <path d="M120,230 L155,238 L172,262 L208,268 L224,292"/>
-                            <path d="M250,120 L242,152 L268,170 L262,200"/>
-                            <path d="M170,330 L200,318 L228,332"/>
-                        </g>
-                    </g>
-
-                    <!-- t5 海洋行星：浅海 + 岛屿 + 冰盖 -->
-                    <g v-if="sceneTier === 5">
-                        <ellipse cx="250" cy="250" rx="120" ry="90" fill="rgba(120,225,255,.14)" filter="url(#soft2)"/>
-                        <g fill="#43b581">
-                            <ellipse cx="160" cy="200" rx="34" ry="20" transform="rotate(-18 160 200)"/>
-                            <ellipse cx="185" cy="215" rx="22" ry="13" transform="rotate(10 185 215)"/>
-                            <ellipse cx="285" cy="265" rx="26" ry="15" transform="rotate(-8 285 265)"/>
-                            <ellipse cx="255" cy="150" rx="17" ry="9" transform="rotate(14 255 150)"/>
-                        </g>
-                        <ellipse cx="220" cy="66" rx="80" ry="26" fill="rgba(255,255,255,.75)" filter="url(#soft)"/>
-                        <ellipse cx="220" cy="380" rx="90" ry="28" fill="rgba(255,255,255,.6)" filter="url(#soft)"/>
-                    </g>
-
-                    <!-- t6 翠绿行星：大陆板块 -->
-                    <g v-if="sceneTier === 6">
-                        <g fill="#4fbf72">
-                            <ellipse cx="155" cy="185" rx="58" ry="38" transform="rotate(-16 155 185)"/>
-                            <ellipse cx="195" cy="220" rx="42" ry="26" transform="rotate(8 195 220)"/>
-                            <ellipse cx="130" cy="235" rx="30" ry="18" transform="rotate(-30 130 235)"/>
-                            <ellipse cx="292" cy="280" rx="48" ry="30" transform="rotate(-12 292 280)"/>
-                            <ellipse cx="268" cy="130" rx="30" ry="16" transform="rotate(18 268 130)"/>
-                        </g>
-                        <g fill="#2e9457" opacity=".65">
-                            <ellipse cx="150" cy="200" rx="34" ry="17" transform="rotate(-16 150 200)"/>
-                            <ellipse cx="295" cy="292" rx="28" ry="14" transform="rotate(-12 295 292)"/>
-                        </g>
-                        <ellipse cx="220" cy="62" rx="76" ry="22" fill="rgba(255,255,255,.7)" filter="url(#soft)"/>
-                    </g>
-
-                    <!-- t7 文明行星：大陆 + 夜灯 -->
-                    <g v-if="sceneTier === 7">
-                        <g fill="#54409e">
-                            <ellipse cx="160" cy="190" rx="55" ry="36" transform="rotate(-14 160 190)"/>
-                            <ellipse cx="196" cy="228" rx="38" ry="23" transform="rotate(12 196 228)"/>
-                            <ellipse cx="290" cy="272" rx="46" ry="28" transform="rotate(-10 290 272)"/>
-                            <ellipse cx="262" cy="132" rx="27" ry="14" transform="rotate(16 262 132)"/>
-                        </g>
-                        <g fill="#ffd166" class="city-lights">
-                            <circle v-for="(p, i) in cityLights" :key="i" :cx="p[0]" :cy="p[1]" r="2.4"
-                                    :style="{animationDelay: (i * .35) + 's'}"/>
-                        </g>
-                    </g>
-
-                    <!-- t8 恒星：日斑 + 耀斑 -->
-                    <g v-if="sceneTier === 8">
-                        <ellipse cx="170" cy="200" rx="34" ry="22" fill="rgba(200,80,10,.35)" filter="url(#soft)"/>
-                        <ellipse cx="280" cy="280" rx="40" ry="26" fill="rgba(200,80,10,.4)" filter="url(#soft)"/>
-                        <ellipse cx="255" cy="150" rx="20" ry="13" fill="rgba(200,80,10,.3)" filter="url(#soft)"/>
-                        <circle cx="220" cy="220" r="170" fill="rgba(255,240,180,.12)" class="sun-breathe"/>
-                    </g>
-
-                    <!-- 云层（海洋/翠绿/文明） -->
-                    <g v-if="sceneTier >= 5 && sceneTier <= 7" class="clouds-g" fill="rgba(255,255,255,.55)" filter="url(#soft)">
-                        <ellipse cx="150" cy="150" rx="52" ry="12"/>
-                        <ellipse cx="190" cy="163" rx="34" ry="9"/>
-                        <ellipse cx="290" cy="220" rx="58" ry="12"/>
-                        <ellipse cx="255" cy="233" rx="32" ry="8"/>
-                        <ellipse cx="180" cy="305" rx="48" ry="11"/>
-                    </g>
-
-                    <!-- 荒漠龟裂 -->
-                    <g v-if="sceneHealth === 'DESERT'" stroke="rgba(40,24,8,.6)" stroke-width="3"
-                       fill="none" stroke-linecap="round">
-                        <path d="M90,190 L135,202 L152,238 L200,248 L218,288"/>
-                        <path d="M280,110 L268,155 L305,180 L298,225"/>
-                        <path d="M160,330 L212,318 L245,344 L300,334"/>
-                        <path d="M330,240 L305,268 L318,300"/>
-                    </g>
-
-                    <!-- 晨昏线阴影 + 高光 -->
-                    <ellipse cx="300" cy="305" rx="210" ry="185" fill="rgba(6,8,24,.42)" filter="url(#soft2)"/>
-                    <ellipse cx="150" cy="140" rx="105" ry="82" fill="rgba(255,255,255,.14)" filter="url(#soft2)"/>
-                    <circle cx="220" cy="220" r="169" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
-                </g>
-
-                <!-- 星环（前半） -->
-                <g v-if="sceneTier >= 6 && sceneTier <= 7" class="ring-g">
-                    <path d="M40,258 A 195 58 -14 0 0 396 186" fill="none"
-                          stroke="rgba(233,237,255,.5)" stroke-width="9" stroke-linecap="round"/>
-                    <path d="M40,258 A 195 58 -14 0 0 396 186" fill="none"
-                          :stroke="tierArt.glow" stroke-opacity=".3" stroke-width="17" stroke-linecap="round"/>
-                </g>
-            </svg>
+            <div class="planet3d-wrap" :class="'health-' + sceneHealth" ref="planetMount"
+                 :title="scenePlanet.planetName"></div>
 
             <div class="building" :class="{ghost: b.ghost}"
                  v-for="(b, i) in sceneBuildings" :key="b.key"
@@ -645,6 +491,7 @@
         </aside>
     </transition>
 </div>
+<script src="/planet3d.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
