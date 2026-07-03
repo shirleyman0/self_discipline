@@ -2,6 +2,7 @@ package com.mike.discipline.controller;
 
 import com.mike.discipline.config.CurrentUser;
 import com.mike.discipline.entity.Habit;
+import com.mike.discipline.entity.HabitCategory;
 import com.mike.discipline.service.HabitService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -22,7 +23,8 @@ public class HabitController {
         this.habitService = habitService;
     }
 
-    public record HabitRequest(@NotBlank @Size(max = 100) String name, String icon, String color) {
+    public record HabitRequest(@NotBlank @Size(max = 100) String name, String icon, String color,
+                               HabitCategory category) {
     }
 
     public record CheckinRequest(String note) {
@@ -35,12 +37,12 @@ public class HabitController {
 
     @PostMapping
     public Habit create(@RequestBody @Valid HabitRequest req) {
-        return habitService.create(CurrentUser.id(), req.name(), req.icon(), req.color());
+        return habitService.create(CurrentUser.id(), req.name(), req.icon(), req.color(), req.category());
     }
 
     @PutMapping("/{id}")
     public Habit update(@PathVariable Long id, @RequestBody HabitRequest req) {
-        return habitService.update(CurrentUser.id(), id, req.name(), req.icon(), req.color());
+        return habitService.update(CurrentUser.id(), id, req.name(), req.icon(), req.color(), req.category());
     }
 
     @DeleteMapping("/{id}")

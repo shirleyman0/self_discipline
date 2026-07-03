@@ -2,6 +2,7 @@ package com.mike.discipline.service;
 
 import com.mike.discipline.entity.Achievement;
 import com.mike.discipline.entity.Habit;
+import com.mike.discipline.entity.HabitCategory;
 import com.mike.discipline.entity.HabitCheckin;
 import com.mike.discipline.entity.PointKind;
 import com.mike.discipline.exception.ApiException;
@@ -45,6 +46,8 @@ public class HabitService {
                     m.put("name", h.getName());
                     m.put("icon", h.getIcon());
                     m.put("color", h.getColor());
+                    m.put("category", h.getCategory().name());
+                    m.put("categoryTitle", h.getCategory().getTitle());
                     m.put("checkedToday", checkedToday.contains(h.getId()));
                     m.put("streak", streakOf(h.getId()));
                     return m;
@@ -53,17 +56,19 @@ public class HabitService {
     }
 
     @Transactional
-    public Habit create(Long userId, String name, String icon, String color) {
+    public Habit create(Long userId, String name, String icon, String color, HabitCategory category) {
         Habit habit = new Habit();
         habit.setUserId(userId);
         habit.setName(name);
         habit.setIcon(icon == null || icon.isBlank() ? "✅" : icon);
         habit.setColor(color == null || color.isBlank() ? "#5470c6" : color);
+        habit.setCategory(category == null ? HabitCategory.LIFE : category);
         return habitRepository.save(habit);
     }
 
     @Transactional
-    public Habit update(Long userId, Long habitId, String name, String icon, String color) {
+    public Habit update(Long userId, Long habitId, String name, String icon, String color,
+                        HabitCategory category) {
         Habit habit = owned(userId, habitId);
         if (name != null && !name.isBlank()) {
             habit.setName(name);
@@ -73,6 +78,9 @@ public class HabitService {
         }
         if (color != null && !color.isBlank()) {
             habit.setColor(color);
+        }
+        if (category != null) {
+            habit.setCategory(category);
         }
         return habitRepository.save(habit);
     }

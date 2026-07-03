@@ -15,382 +15,389 @@
         <div class="toast" :class="{alert: t.alert}" v-for="t in toasts" :key="t.id">{{ t.msg }}</div>
     </div>
 
-    <div class="layout">
-        <aside class="sidebar">
-            <div class="logo">自律星球</div>
-            <div class="logo-sub">用自律养大你的星球 🌱</div>
-            <nav>
-                <a :class="{active: view==='base'}" @click="go('base')">🪐 星球基地</a>
-                <a :class="{active: view==='habits'}" @click="go('habits')">✅ 每日打卡</a>
-                <a :class="{active: view==='tasks'}" @click="go('tasks')">📋 任务清单</a>
-                <a :class="{active: view==='focus'}" @click="go('focus')">⏱️ 专注舱</a>
-                <a :class="{active: view==='shop'}" @click="go('shop')">🛍️ 奖励商店</a>
-                <a :class="{active: view==='partner'}" @click="go('partner')">👥 共航搭档
-                    <span class="badge" v-if="unreadNudges > 0">{{ unreadNudges }}</span>
-                </a>
-                <a :class="{active: view==='stats'}" @click="go('stats')">📊 数据舱</a>
-            </nav>
-            <div class="side-tip">
-                打卡 · 任务 · 专注 = 能量<br>
-                能量养星球，积分换奖励 ✨
+    <!-- 火箭转场 -->
+    <div class="warp-rocket" v-if="warping">🚀</div>
+
+    <!-- ==================== 星球场景 ==================== -->
+    <div class="scene" :class="[skyClass, 'health-' + sceneHealth]" v-if="scenePlanet">
+        <!-- 天气 -->
+        <template v-if="sceneHealth === 'FLOURISHING'">
+            <div class="aurora"></div>
+            <div class="meteor"></div>
+        </template>
+        <template v-if="sceneHealth === 'GLOOMY'">
+            <div class="cloud" style="top:14%;left:18%">☁️</div>
+            <div class="cloud" style="top:9%;right:22%;animation-delay:-9s">☁️</div>
+            <div class="cloud" style="top:24%;right:8%;animation-delay:-17s;font-size:44px">☁️</div>
+        </template>
+
+        <!-- 访问模式横幅 -->
+        <div class="visit-bar" v-if="visiting">
+            🛸 你正在访问 <b>{{ scenePlanet.planetName }}</b>
+            <button class="btn-sm" @click="goHome">↩ 返航</button>
+        </div>
+
+        <!-- HUD 左上：星球信息 -->
+        <div class="hud hud-tl">
+            <div class="p-name" @click="visiting ? null : renamePlanet()">
+                🪐 {{ scenePlanet.planetName }}
             </div>
-        </aside>
+            <div class="p-tier">
+                Lv.{{ scenePlanet.level }} · {{ tierInfo(scenePlanet.level).name }} · {{ healthLabel }}
+            </div>
+            <div class="xp-bar"><i :style="{width: sceneLevelPercent + '%'}"></i></div>
+            <div class="p-row">
+                <span>{{ scenePlanet.xp }} XP</span>
+                <b class="num">{{ scenePlanet.points }} P</b>
+            </div>
+        </div>
 
-        <main class="main">
-            <div class="topbar">
-                <h2>{{ viewTitle.icon }} {{ viewTitle.name }}<small>{{ viewTitle.sub }}</small></h2>
-                <div class="user-chip" v-if="profile">
-                    <span>{{ profile.nickname }}</span>
-                    <span class="lv">Lv.{{ profile.level }}</span>
-                    <span class="pts">{{ profile.points }} P</span>
-                    <span class="link" @click="logout">退出</span>
-                </div>
+        <!-- HUD 右上：今日概览（自己的星球才显示） -->
+        <div class="hud hud-tr" v-if="!visiting">
+            <div class="chip"><b class="cyan">{{ checkedCount }}/{{ habits.length }}</b><br>打卡</div>
+            <div class="chip"><b class="gold">{{ doneTodayCount }}/{{ todayTasks.length }}</b><br>任务</div>
+            <div class="chip"><b class="purple">{{ focusToday.minutes }}′</b><br>专注</div>
+            <div class="chip" style="cursor:pointer" @click="logout">🚪<br>退出</div>
+        </div>
+
+        <!-- 失败警告 chip -->
+        <div class="alert-chip" v-if="!visiting && recentFailures.length && failuresRecent"
+             @click="openPanel('stats')">
+            💥 星球遭到陨石撞击（{{ recentFailures.length }} 条失败记录）— 点击查看
+        </div>
+
+        <!-- 星球 + 建筑 -->
+        <div class="planet-stage" :class="{warping: warping}">
+            <div class="planet-ring" v-if="tierOf(scenePlanet.level) >= 6"></div>
+            <div class="planet-core"
+                 :class="['t' + tierOf(scenePlanet.level), 'health-' + sceneHealth]"
+                 @click="openPanel('planet')" :title="scenePlanet.planetName">
+                <div class="surface"></div>
+                <svg class="cracks" viewBox="0 0 330 330" v-if="sceneHealth === 'DESERT'">
+                    <path d="M60,140 L95,150 L110,180 L150,188 L165,220"/>
+                    <path d="M210,80 L200,115 L230,135 L225,170"/>
+                    <path d="M120,250 L160,242 L185,262 L230,255"/>
+                </svg>
             </div>
 
-            <!-- ================= 星球基地 ================= -->
-            <div v-if="view==='base'">
-                <div class="nudge-banner" v-if="latestNudge">
-                    🔔 <b>{{ partnerName }}</b>{{ latestNudge.type === 'CHEER' ? ' 给你打气：' : ' 在催你了：' }}
-                    「{{ latestNudge.message || (latestNudge.type === 'CHEER' ? '干得漂亮，继续保持！' : '别摸鱼了，快去学习！') }}」
-                </div>
+            <div class="building" :class="{ghost: b.ghost}"
+                 v-for="(b, i) in sceneBuildings" :key="b.key"
+                 :style="{'--a': b.angle + 'deg', '--r': '236px', '--d': (i * 0.4) + 's'}"
+                 @click="b.act">
+                <span class="b-emoji">{{ b.emoji }}</span>
+                <span class="b-label">{{ b.name }}</span>
+                <span class="b-sub">{{ b.sub }}</span>
+            </div>
+        </div>
 
-                <div class="fail-banner" v-if="recentFailures.length">
-                    💥 <b>星球受到了陨石撞击</b>（未完成的任务，去「数据舱」写复盘修复它）
-                    <ul>
-                        <li v-for="f in recentFailures.slice(0,4)" :key="f.id">
-                            {{ f.reason }}（{{ f.delta }} P，{{ fmtTime(f.createdAt) }}）
-                        </li>
-                    </ul>
-                </div>
+        <!-- 底部格言 -->
+        <div class="quote-line" v-if="!visiting">「 {{ quote }} 」</div>
 
-                <div class="grid-2">
+        <!-- 访问模式：留言表单 -->
+        <div class="dock" v-if="visiting" style="gap:10px;padding:10px 16px">
+            <span class="gift-pick">
+                <span v-for="g in ['🎁','🌸','☕','⭐','🍀']" :key="g"
+                      :class="{sel: giftPick === g}" @click="giftPick = giftPick === g ? '' : g">{{ g }}</span>
+            </span>
+            <input type="text" v-model.trim="visitMessage" placeholder="给 TA 的星球留句话…"
+                   style="width:240px;padding:7px 12px" @keyup.enter="sendPlanetMessage">
+            <button class="btn-sm" @click="sendPlanetMessage">留言</button>
+        </div>
+
+        <!-- 底部 dock（自己的星球） -->
+        <div class="dock" v-else>
+            <button data-tip="星球档案" :class="{on: panel==='planet'}" @click="openPanel('planet')">🪐</button>
+            <button data-tip="每日打卡" :class="{on: panel==='habits'}" @click="openPanel('habits')">✅</button>
+            <button data-tip="任务清单" :class="{on: panel==='tasks'}" @click="openPanel('tasks')">📋</button>
+            <button data-tip="专注舱" :class="{on: panel==='focus'}" @click="openPanel('focus')">⏱️</button>
+            <button data-tip="奖励商店" :class="{on: panel==='shop'}" @click="openPanel('shop')">🛍️</button>
+            <button data-tip="共航搭档" :class="{on: panel==='partner'}" @click="openPanel('partner')">👥
+                <span class="badge" v-if="unreadNudges > 0">{{ unreadNudges }}</span>
+            </button>
+            <button data-tip="数据舱" :class="{on: panel==='stats'}" @click="openPanel('stats')">📊</button>
+        </div>
+    </div>
+
+    <!-- ==================== 滑出面板 ==================== -->
+    <transition name="slide">
+        <aside class="panel" v-if="panel">
+            <div class="panel-head">
+                <h2>{{ panelTitle.icon }} {{ panelTitle.name }}<small>{{ panelTitle.sub }}</small></h2>
+                <button class="panel-close" @click="closePanel">✕</button>
+            </div>
+            <div class="panel-body">
+
+                <!-- ===== 星球档案 ===== -->
+                <template v-if="panel === 'planet'">
                     <div class="card" v-if="profile">
-                        <div class="planet-wrap">
-                            <div class="planet" :class="planetClass(profile.level)"></div>
-                            <div class="planet-name">{{ tierInfo(profile.level).name }}</div>
-                            <div class="planet-tier">
-                                Lv.{{ profile.level }} · {{ tierInfo(profile.level).desc }}
+                        <h3>🪐 {{ myPlanetName }}
+                            <button class="btn-sm btn-ghost" @click="renamePlanet">改名</button>
+                        </h3>
+                        <p class="muted">
+                            Lv.{{ profile.level }} · {{ profile.xp }} XP · {{ profile.points }} P ·
+                            健康状态：{{ healthLabel }}
+                            <template v-if="myHealth.failStreak > 0">
+                                （已连续 {{ myHealth.failStreak }} 天没有产出，完成任意打卡/任务即可开始恢复）
+                            </template>
+                        </p>
+                        <div class="xp-bar"><i :style="{width: levelPercent + '%'}"></i></div>
+                        <p class="muted" style="margin-top:6px">
+                            距离下一次进化还需 {{ profile.levelProgress.needed - profile.levelProgress.current }} 能量
+                        </p>
+                    </div>
+
+                    <div class="card">
+                        <h3>🌌 进化之路</h3>
+                        <div class="tier-ladder">
+                            <div class="tier-step"
+                                 v-for="(t, i) in tierLadder" :key="i"
+                                 :class="{now: t.now, past: t.past}">
+                                <span>{{ t.now ? '📍' : (t.past ? '✅' : '🔒') }}</span>
+                                <b>{{ t.name }}</b>
+                                <span class="muted">Lv.{{ t.minLevel }}+ · {{ t.desc }}</span>
                             </div>
-                            <div class="xp-bar"><i :style="{width: levelPercent + '%'}"></i></div>
-                            <p class="muted" style="margin-top:8px">
-                                {{ profile.xp }} XP · 距离下一次进化还需
-                                {{ profile.levelProgress.needed - profile.levelProgress.current }} 能量
-                            </p>
                         </div>
                     </div>
 
                     <div class="card">
-                        <h3>📡 今日概览</h3>
-                        <div class="stat-chips">
-                            <div class="stat-chip">
-                                <div class="v cyan">{{ checkedCount }}/{{ habits.length }}</div>
-                                <div class="k">习惯打卡</div>
-                            </div>
-                            <div class="stat-chip">
-                                <div class="v gold">{{ doneTodayCount }}/{{ todayTasks.length }}</div>
-                                <div class="k">任务完成</div>
-                            </div>
-                            <div class="stat-chip">
-                                <div class="v purple">{{ focusToday.minutes }}<small style="font-size:12px">min</small></div>
-                                <div class="k">专注时长</div>
-                            </div>
-                        </div>
-                        <div class="quote">「 {{ quote }} 」</div>
-                        <!-- 今日 PK 摘要 -->
-                        <div class="pk-row" v-if="partner" style="margin-top:16px">
-                            <div class="pk-label">
-                                <b>本周 PK：我 {{ me.weekPoints }} P</b>
-                                <b>{{ partner.nickname }} {{ partner.weekPoints }} P</b>
-                            </div>
-                            <div class="pk-track">
-                                <div class="mine" :style="{width: pkPercent(me.weekPoints, partner.weekPoints) + '%'}"></div>
-                                <div class="theirs" :style="{width: (100 - pkPercent(me.weekPoints, partner.weekPoints)) + '%'}"></div>
-                            </div>
+                        <h3>💌 星球留言板</h3>
+                        <p class="muted" v-if="!myMessages.length">还没有访客留言。邀请搭档来你的星球看看吧！</p>
+                        <div class="msg-item" v-for="m in myMessages" :key="m.id">
+                            <div class="m-head"><span>{{ m.fromNickname }}</span><span>{{ fmtTime(m.createdAt) }}</span></div>
+                            <span class="gift" v-if="m.gift">{{ m.gift }}</span>{{ m.content }}
                         </div>
                     </div>
-                </div>
+                </template>
 
-                <!-- 新手引导：没有任何数据时显示 -->
-                <div class="card" v-if="!habits.length && !tasks.length">
-                    <h3>🚀 欢迎登陆自律星球 —— 玩法只需 4 步</h3>
-                    <div class="howto">
-                        <div class="step">
-                            <div class="ico">✅</div>
-                            <div class="t">1. 建立习惯和任务</div>
-                            <div class="d">打卡、完成任务、专注学习都会产生「能量」和「积分」</div>
-                        </div>
-                        <div class="step">
-                            <div class="ico">🪐</div>
-                            <div class="t">2. 星球进化</div>
-                            <div class="d">能量（XP）积累让你的星球从星尘一路进化成恒星</div>
-                        </div>
-                        <div class="step">
-                            <div class="ico">🛍️</div>
-                            <div class="t">3. 积分换奖励</div>
-                            <div class="d">在商店给自己定奖励：奶茶、游戏、剧集…用积分兑换</div>
-                        </div>
-                        <div class="step">
-                            <div class="ico">👥</div>
-                            <div class="t">4. 邀请搭档</div>
-                            <div class="d">和朋友结伴，互相监督、每周 PK，谁摸鱼一目了然</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="grid-2">
+                <!-- ===== 每日打卡 ===== -->
+                <template v-if="panel === 'habits'">
                     <div class="card">
-                        <h3>✅ 今日打卡</h3>
-                        <p class="muted" v-if="!habits.length">还没有习惯，去「每日打卡」创建第一个</p>
+                        <h3>➕ 新习惯</h3>
+                        <div class="form-row">
+                            <input type="text" v-model.trim="habitForm.name" placeholder="习惯名称，如：背 50 个单词" @keyup.enter="addHabit">
+                            <input style="width:70px" v-model.trim="habitForm.icon" placeholder="📚">
+                        </div>
+                        <div class="form-row">
+                            <select v-model="habitForm.category" style="flex:1">
+                                <option value="STUDY">📚 学习 — 星球上长出图书馆</option>
+                                <option value="EXERCISE">🏃 运动 — 长出体育场</option>
+                                <option value="HEALTH">🌙 作息 — 长出灯塔</option>
+                                <option value="CREATE">🎨 创作 — 长出艺术宫</option>
+                                <option value="LIFE">🌱 生活 — 长出游乐园</option>
+                            </select>
+                            <button @click="addHabit">创建</button>
+                        </div>
+                        <p class="muted">打卡 +10 能量 +10 P ｜ 连续 7 天 +30 ｜ 连续 30 天 +100 ｜ 同类打卡越多，建筑越高级</p>
+                    </div>
+
+                    <div class="card">
+                        <h3>🔥 我的习惯</h3>
+                        <p class="muted" v-if="!habits.length">暂无习惯，创建一个让星球长出第一栋建筑吧</p>
                         <div class="item-row" v-for="h in habits" :key="h.id">
                             <span class="title">{{ h.icon }} {{ h.name }}
+                                <span class="tag">{{ h.categoryTitle }}</span>
                                 <span class="streak-badge" v-if="h.streak > 0">🔥 {{ h.streak }} 天</span>
                             </span>
-                            <button class="btn-sm" v-if="!h.checkedToday" @click="checkin(h)">打卡 +10</button>
-                            <span class="muted" v-else>✔ 已完成</span>
+                            <button class="btn-sm btn-ghost" @click="showHeatmap(h)">热力图</button>
+                            <button class="btn-sm" v-if="!h.checkedToday" @click="checkin(h)">打卡</button>
+                            <span class="muted" v-else>✔</span>
+                            <button class="btn-sm btn-danger" @click="removeHabit(h)">删除</button>
                         </div>
                     </div>
 
+                    <div class="card" v-if="heatmapHabit">
+                        <h3>{{ heatmapHabit.icon }} {{ heatmapHabit.name }} · {{ heatmapYear }} 年</h3>
+                        <div id="heatmap" class="chart-sm"></div>
+                    </div>
+                </template>
+
+                <!-- ===== 任务清单 ===== -->
+                <template v-if="panel === 'tasks'">
                     <div class="card">
-                        <h3>📋 今日任务</h3>
-                        <p class="muted" v-if="!todayTasks.length">今天没有任务，去「任务清单」安排一下</p>
-                        <div class="item-row" v-for="t in todayTasks" :key="t.id">
+                        <h3>➕ 新任务</h3>
+                        <div class="form-row">
+                            <input type="text" v-model.trim="taskForm.title" placeholder="任务内容，如：刷 10 道算法题" @keyup.enter="addTask">
+                        </div>
+                        <div class="form-row">
+                            <select v-model="taskForm.type">
+                                <option value="DAILY">每日任务</option>
+                                <option value="WEEKLY">每周任务</option>
+                                <option value="ONCE">一次性</option>
+                            </select>
+                            <input type="date" v-model="taskForm.dueDate" v-if="taskForm.type==='ONCE'">
+                            <input type="number" style="width:90px" v-model.number="taskForm.points" min="1" placeholder="积分">
+                            <button @click="addTask">创建</button>
+                        </div>
+                        <p class="muted">完成获得等额能量和积分；到期未完成 = 每晚 0 点<b style="color:var(--coral)">扣同额积分</b>，星球会被陨石砸 💥</p>
+                    </div>
+
+                    <div class="card" v-for="group in taskGroups" :key="group.type">
+                        <h3>{{ group.label }}</h3>
+                        <p class="muted" v-if="!group.items.length">暂无</p>
+                        <div class="item-row" v-for="t in group.items" :key="t.id">
                             <span class="title" :class="{done: t.status==='DONE'}">
-                                <span class="tag" :class="t.status">{{ typeLabel(t.type) }}</span>{{ t.title }}
+                                <span class="tag" :class="t.status">{{ statusLabel(t.status) }}</span>
+                                {{ t.title }}
+                                <span class="muted" v-if="t.dueDate">（截止 {{ t.dueDate }}）</span>
+                                <span class="muted num">+{{ t.points }}P</span>
                             </span>
-                            <button class="btn-sm" v-if="t.status==='PENDING'" @click="completeTask(t)">完成 +{{ t.points }}</button>
-                            <span class="muted" v-else-if="t.status==='DONE'">✔ 已完成</span>
-                            <span class="tag FAILED" v-else>失败</span>
+                            <button class="btn-sm" v-if="t.status==='PENDING'" @click="completeTask(t)">完成</button>
+                            <button class="btn-sm btn-danger" @click="removeTask(t)">删除</button>
                         </div>
                     </div>
-                </div>
-            </div>
+                </template>
 
-            <!-- ================= 每日打卡 ================= -->
-            <div v-if="view==='habits'">
-                <div class="card">
-                    <h3>➕ 新习惯</h3>
-                    <div class="form-row">
-                        <input type="text" v-model.trim="habitForm.name" placeholder="习惯名称，如：背 50 个单词" @keyup.enter="addHabit">
-                        <input style="width:74px" v-model.trim="habitForm.icon" placeholder="📚">
-                        <button @click="addHabit">创建</button>
-                    </div>
-                    <p class="muted">每次打卡 +10 能量 +10 积分 ｜ 连续 7 天额外 +30 ｜ 连续 30 天额外 +100</p>
-                </div>
-
-                <div class="card">
-                    <h3>🔥 我的习惯</h3>
-                    <p class="muted" v-if="!habits.length">暂无习惯</p>
-                    <div class="item-row" v-for="h in habits" :key="h.id">
-                        <span class="title">{{ h.icon }} {{ h.name }}
-                            <span class="streak-badge" v-if="h.streak > 0">🔥 连续 {{ h.streak }} 天</span>
-                        </span>
-                        <button class="btn-sm btn-ghost" @click="showHeatmap(h)">热力图</button>
-                        <button class="btn-sm" v-if="!h.checkedToday" @click="checkin(h)">打卡</button>
-                        <span class="muted" v-else>✔</span>
-                        <button class="btn-sm btn-danger" @click="removeHabit(h)">删除</button>
-                    </div>
-                </div>
-
-                <div class="card" v-if="heatmapHabit">
-                    <h3>{{ heatmapHabit.icon }} {{ heatmapHabit.name }} · {{ heatmapYear }} 年打卡热力图</h3>
-                    <div id="heatmap" class="chart-sm"></div>
-                </div>
-            </div>
-
-            <!-- ================= 任务清单 ================= -->
-            <div v-if="view==='tasks'">
-                <div class="card">
-                    <h3>➕ 新任务</h3>
-                    <div class="form-row">
-                        <input type="text" v-model.trim="taskForm.title" placeholder="任务内容，如：刷 10 道算法题" @keyup.enter="addTask">
-                        <select v-model="taskForm.type">
-                            <option value="DAILY">每日任务</option>
-                            <option value="WEEKLY">每周任务</option>
-                            <option value="ONCE">一次性</option>
-                        </select>
-                        <input type="date" v-model="taskForm.dueDate" v-if="taskForm.type==='ONCE'">
-                        <input type="number" style="width:96px" v-model.number="taskForm.points" min="1" placeholder="积分">
-                        <button @click="addTask">创建</button>
-                    </div>
-                    <p class="muted">完成获得等额能量和积分；到期未完成 = 每晚 0 点结算<b style="color:var(--coral)">扣除同额积分</b>，星球会被陨石砸 💥</p>
-                </div>
-
-                <div class="card" v-for="group in taskGroups" :key="group.type">
-                    <h3>{{ group.label }}</h3>
-                    <p class="muted" v-if="!group.items.length">暂无</p>
-                    <div class="item-row" v-for="t in group.items" :key="t.id">
-                        <span class="title" :class="{done: t.status==='DONE'}">
-                            <span class="tag" :class="t.status">{{ statusLabel(t.status) }}</span>
-                            {{ t.title }}
-                            <span class="muted" v-if="t.dueDate">（截止 {{ t.dueDate }}）</span>
-                            <span class="muted num">+{{ t.points }}P</span>
-                        </span>
-                        <button class="btn-sm" v-if="t.status==='PENDING'" @click="completeTask(t)">完成</button>
-                        <button class="btn-sm btn-danger" @click="removeTask(t)">删除</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ================= 专注舱 ================= -->
-            <div v-if="view==='focus'">
-                <div class="card pomodoro">
-                    <div class="ring" :class="{running: timerRunning}" :style="{'--pct': ringPercent + '%'}">
-                        <div class="time">{{ timerDisplay }}</div>
-                    </div>
-                    <div class="op-label">
-                        {{ timerRunning ? '· 专注飞行中，不要离开驾驶舱 ·' : (timerPaused ? '· 已暂停 ·' : '· 待命中 ·') }}
-                    </div>
-                    <div class="presets" v-if="!timerRunning && !timerPaused">
-                        <button class="btn-sm btn-ghost" :class="{'active-preset': pomoMinutes===m}"
-                                v-for="m in [25, 45, 60]" :key="m"
-                                @click="pomoMinutes = m; resetTimer()">{{ m }} 分钟</button>
-                        <input type="number" style="width:82px;padding:6px 10px" v-model.number="pomoMinutes"
-                               min="1" max="480" @change="resetTimer">
-                        <select v-model="pomoTaskId">
-                            <option :value="null">不关联任务</option>
-                            <option v-for="t in pendingTasks" :key="t.id" :value="t.id">{{ t.title }}</option>
-                        </select>
-                    </div>
-                    <div class="controls">
-                        <button v-if="!timerRunning" @click="startTimer">
-                            {{ timerPaused ? '▶ 继续' : '🚀 开始专注' }}
-                        </button>
-                        <button class="btn-ghost" v-else @click="pauseTimer">⏸ 暂停</button>
-                        <button class="btn-ghost" @click="resetTimer" v-if="timerRunning || timerPaused">✕ 放弃</button>
-                    </div>
-                    <p class="muted" style="margin-top:18px">
-                        今日已专注 {{ focusToday.minutes }} 分钟 · {{ focusToday.count }} 次（每次 ≥25 分钟 +5 积分）
-                    </p>
-                </div>
-
-                <div class="card" v-if="focusToday.sessions && focusToday.sessions.length">
-                    <h3>🛰️ 今日飞行日志</h3>
-                    <div class="item-row" v-for="s in focusToday.sessions" :key="s.id">
-                        <span class="title">⏱ 专注 {{ s.durationMinutes }} 分钟</span>
-                        <span class="muted num">{{ fmtTime(s.startTime) }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ================= 奖励商店 ================= -->
-            <div v-if="view==='shop'">
-                <div class="card">
-                    <div class="shop-balance">当前余额 <b class="num">{{ profile ? profile.points : 0 }}</b> P</div>
-                    <p class="muted" style="text-align:center;margin-bottom:16px">
-                        给自己定一些奖励吧！努力攒的积分，就该痛快花掉 —— 这才是自律的意义 ✨
-                    </p>
-                    <div class="shop-grid">
-                        <div class="shop-item" v-for="r in rewards" :key="r.id">
-                            <span class="del" @click="removeReward(r)">✕ 删除</span>
-                            <div class="ico">{{ r.icon }}</div>
-                            <div class="name">{{ r.name }}</div>
-                            <div class="cost num">{{ r.cost }} P</div>
-                            <button class="btn-sm btn-gold" @click="redeem(r)"
-                                    :disabled="profile && profile.points < r.cost">
-                                {{ profile && profile.points < r.cost ? '积分不足' : '兑换' }}
+                <!-- ===== 专注舱 ===== -->
+                <template v-if="panel === 'focus'">
+                    <div class="card pomodoro">
+                        <div class="ring" :class="{running: timerRunning}" :style="{'--pct': ringPercent + '%'}">
+                            <div class="time">{{ timerDisplay }}</div>
+                        </div>
+                        <div class="op-label">
+                            {{ timerRunning ? '· 专注飞行中 ·' : (timerPaused ? '· 已暂停 ·' : '· 待命中 ·') }}
+                        </div>
+                        <div class="presets" v-if="!timerRunning && !timerPaused">
+                            <button class="btn-sm btn-ghost" :class="{'active-preset': pomoMinutes===m}"
+                                    v-for="m in [25, 45, 60]" :key="m"
+                                    @click="pomoMinutes = m; resetTimer()">{{ m }} 分钟</button>
+                            <input type="number" style="width:78px;padding:6px 10px" v-model.number="pomoMinutes"
+                                   min="1" max="480" @change="resetTimer">
+                        </div>
+                        <div class="presets" v-if="!timerRunning && !timerPaused">
+                            <select v-model="pomoTaskId" style="max-width:280px">
+                                <option :value="null">不关联任务</option>
+                                <option v-for="t in pendingTasks" :key="t.id" :value="t.id">{{ t.title }}</option>
+                            </select>
+                        </div>
+                        <div class="controls">
+                            <button v-if="!timerRunning" @click="startTimer">
+                                {{ timerPaused ? '▶ 继续' : '🚀 开始专注' }}
                             </button>
+                            <button class="btn-ghost" v-else @click="pauseTimer">⏸ 暂停</button>
+                            <button class="btn-ghost" @click="resetTimer" v-if="timerRunning || timerPaused">✕ 放弃</button>
                         </div>
-                    </div>
-                    <p class="muted" v-if="!rewards.length" style="text-align:center">
-                        还没有上架奖励。试试添加：🧋 一杯奶茶 100P ｜ 📺 看一集剧 50P ｜ 🎮 游戏 1 小时 150P
-                    </p>
-                </div>
-
-                <div class="card">
-                    <h3>➕ 上架新奖励</h3>
-                    <div class="form-row">
-                        <input type="text" v-model.trim="rewardForm.name" placeholder="奖励名称，如：一杯奶茶" @keyup.enter="addReward">
-                        <input style="width:74px" v-model.trim="rewardForm.icon" placeholder="🧋">
-                        <input type="number" style="width:110px" v-model.number="rewardForm.cost" min="1" placeholder="所需积分">
-                        <button @click="addReward">上架</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ================= 共航搭档 ================= -->
-            <div v-if="view==='partner'">
-                <!-- 未绑定 -->
-                <div v-if="!partner">
-                    <div class="card">
-                        <h3>👥 找一个共航搭档</h3>
-                        <p class="muted" style="margin-bottom:16px">
-                            一个人自律靠意志力，两个人自律靠互相不服输。绑定搭档后可以看到对方的星球、
-                            每天的完成情况、每周积分 PK——还能在 TA 摸鱼的时候戳 TA 一下 👉
+                        <p class="muted" style="margin-top:16px">
+                            今日已专注 {{ focusToday.minutes }} 分钟 · {{ focusToday.count }} 次（≥25 分钟 +5 P）
                         </p>
-                        <div class="grid-2">
-                            <div>
-                                <p class="muted" style="margin-bottom:8px">① 把你的邀请码发给朋友（点击复制）：</p>
-                                <div class="invite-code" @click="copyCode" :title="'点击复制'">{{ inviteCode }}</div>
-                            </div>
-                            <div>
-                                <p class="muted" style="margin-bottom:8px">② 或者输入对方的邀请码：</p>
-                                <div class="form-row">
-                                    <input type="text" v-model.trim="bindCode" placeholder="6 位邀请码" maxlength="6"
-                                           style="flex:1;text-transform:uppercase;letter-spacing:4px" @keyup.enter="bindPartner">
-                                    <button @click="bindPartner">绑定</button>
-                                </div>
-                            </div>
+                    </div>
+
+                    <div class="card" v-if="focusToday.sessions && focusToday.sessions.length">
+                        <h3>🛰️ 今日飞行日志</h3>
+                        <div class="item-row" v-for="s in focusToday.sessions" :key="s.id">
+                            <span class="title">⏱ 专注 {{ s.durationMinutes }} 分钟</span>
+                            <span class="muted num">{{ fmtTime(s.startTime) }}</span>
                         </div>
                     </div>
-                </div>
+                </template>
 
-                <!-- 已绑定 -->
-                <div v-else>
+                <!-- ===== 奖励商店 ===== -->
+                <template v-if="panel === 'shop'">
                     <div class="card">
-                        <h3>⚔️ 本周积分争霸
-                            <span class="muted" style="font-weight:400;margin-left:8px">（周一起累计，谁赢谁戴 👑）</span>
-                        </h3>
-                        <div class="duo">
-                            <div class="duo-side" :class="{winner: me.weekPoints >= partner.weekPoints}">
-                                <div class="crown">{{ me.weekPoints >= partner.weekPoints ? '👑' : '' }}</div>
-                                <div class="planet small" :class="planetClass(me.level)" style="margin:0 auto"></div>
-                                <div class="nick">{{ me.nickname }}（我）</div>
-                                <div class="lvl">Lv.{{ me.level }} · {{ tierInfo(me.level).name }}</div>
-                                <div class="pt-delta plus num" style="font-size:22px">{{ me.weekPoints }} P</div>
-                            </div>
-                            <div class="vs">VS</div>
-                            <div class="duo-side" :class="{winner: partner.weekPoints > me.weekPoints}">
-                                <div class="crown">{{ partner.weekPoints > me.weekPoints ? '👑' : '' }}</div>
-                                <div class="planet small" :class="planetClass(partner.level)" style="margin:0 auto"></div>
-                                <div class="nick">{{ partner.nickname }}</div>
-                                <div class="lvl">Lv.{{ partner.level }} · {{ tierInfo(partner.level).name }}</div>
-                                <div class="pt-delta minus num" style="font-size:22px">{{ partner.weekPoints }} P</div>
+                        <div class="shop-balance">当前余额 <b class="num">{{ profile ? profile.points : 0 }}</b> P</div>
+                        <div class="shop-grid">
+                            <div class="shop-item" v-for="r in rewards" :key="r.id">
+                                <span class="del" @click="removeReward(r)">✕</span>
+                                <div class="ico">{{ r.icon }}</div>
+                                <div class="name">{{ r.name }}</div>
+                                <div class="cost num">{{ r.cost }} P</div>
+                                <button class="btn-sm btn-gold" @click="redeem(r)"
+                                        :disabled="profile && profile.points < r.cost">
+                                    {{ profile && profile.points < r.cost ? '积分不足' : '兑换' }}
+                                </button>
                             </div>
                         </div>
+                        <p class="muted" v-if="!rewards.length" style="text-align:center;margin-top:8px">
+                            还没有上架奖励。试试：🧋 奶茶 100P ｜ 📺 一集剧 50P ｜ 🎮 游戏 1 小时 150P
+                        </p>
+                    </div>
 
-                        <div style="margin-top:18px">
-                            <div class="pk-row">
-                                <div class="pk-label"><b>今日打卡 {{ me.todayCheckins }}</b><b>{{ partner.todayCheckins }}</b></div>
-                                <div class="pk-track">
-                                    <div class="mine" :style="{width: pkPercent(me.todayCheckins, partner.todayCheckins) + '%'}"></div>
-                                    <div class="theirs" :style="{width: (100 - pkPercent(me.todayCheckins, partner.todayCheckins)) + '%'}"></div>
-                                </div>
-                            </div>
-                            <div class="pk-row">
-                                <div class="pk-label"><b>今日任务 {{ me.todayTasksDone }}</b><b>{{ partner.todayTasksDone }}</b></div>
-                                <div class="pk-track">
-                                    <div class="mine" :style="{width: pkPercent(me.todayTasksDone, partner.todayTasksDone) + '%'}"></div>
-                                    <div class="theirs" :style="{width: (100 - pkPercent(me.todayTasksDone, partner.todayTasksDone)) + '%'}"></div>
-                                </div>
-                            </div>
-                            <div class="pk-row">
-                                <div class="pk-label"><b>今日专注 {{ me.todayFocusMinutes }} min</b><b>{{ partner.todayFocusMinutes }} min</b></div>
-                                <div class="pk-track">
-                                    <div class="mine" :style="{width: pkPercent(me.todayFocusMinutes, partner.todayFocusMinutes) + '%'}"></div>
-                                    <div class="theirs" :style="{width: (100 - pkPercent(me.todayFocusMinutes, partner.todayFocusMinutes)) + '%'}"></div>
-                                </div>
-                            </div>
+                    <div class="card">
+                        <h3>➕ 上架新奖励</h3>
+                        <div class="form-row">
+                            <input type="text" v-model.trim="rewardForm.name" placeholder="奖励名称" @keyup.enter="addReward">
+                            <input style="width:70px" v-model.trim="rewardForm.icon" placeholder="🧋">
+                            <input type="number" style="width:100px" v-model.number="rewardForm.cost" min="1" placeholder="积分">
+                            <button @click="addReward">上架</button>
                         </div>
+                    </div>
+                </template>
 
-                        <div class="form-row" style="margin-top:16px;justify-content:center">
-                            <button class="btn-sm" @click="sendNudge('CHEER')">👏 给 TA 加油</button>
-                            <button class="btn-sm btn-gold" @click="sendNudge('POKE')">👉 催 TA 学习</button>
-                            <input type="text" v-model.trim="nudgeMessage" placeholder="附加一句话（可选）" style="flex:1;max-width:300px">
-                            <span class="link" @click="unbindPartner" style="align-self:center">解除绑定</span>
+                <!-- ===== 共航搭档 ===== -->
+                <template v-if="panel === 'partner'">
+                    <div v-if="!partner">
+                        <div class="card">
+                            <h3>👥 找一个共航搭档</h3>
+                            <p class="muted" style="margin-bottom:14px">
+                                绑定后可以互相访问星球、看到对方每天的完成情况、每周积分 PK，
+                                还能在 TA 摸鱼时戳 TA 👉
+                            </p>
+                            <p class="muted" style="margin-bottom:6px">① 你的邀请码（点击复制）：</p>
+                            <div class="invite-code" @click="copyCode">{{ inviteCode }}</div>
+                            <p class="muted" style="margin:14px 0 6px">② 或输入对方的邀请码：</p>
+                            <div class="form-row">
+                                <input type="text" v-model.trim="bindCode" placeholder="6 位邀请码" maxlength="6"
+                                       style="flex:1;text-transform:uppercase;letter-spacing:4px" @keyup.enter="bindPartner">
+                                <button @click="bindPartner">绑定</button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="grid-2">
+                    <div v-else>
+                        <div class="card">
+                            <h3>⚔️ 本周积分争霸</h3>
+                            <div class="duo">
+                                <div class="duo-side" :class="{winner: me.weekPoints >= partner.weekPoints}">
+                                    <div class="crown">{{ me.weekPoints >= partner.weekPoints ? '👑' : '' }}</div>
+                                    <div class="mini-planet" :class="'t' + tierOf(me.level)"></div>
+                                    <div class="nick">{{ me.nickname }}（我）</div>
+                                    <div class="lvl">Lv.{{ me.level }} · {{ tierInfo(me.level).name }}</div>
+                                    <div class="pt-delta plus num" style="font-size:20px">{{ me.weekPoints }} P</div>
+                                </div>
+                                <div class="vs">VS</div>
+                                <div class="duo-side" :class="{winner: partner.weekPoints > me.weekPoints}">
+                                    <div class="crown">{{ partner.weekPoints > me.weekPoints ? '👑' : '' }}</div>
+                                    <div class="mini-planet" :class="'t' + tierOf(partner.level)"></div>
+                                    <div class="nick">{{ partner.nickname }}</div>
+                                    <div class="lvl">Lv.{{ partner.level }} · {{ tierInfo(partner.level).name }}</div>
+                                    <div class="pt-delta minus num" style="font-size:20px">{{ partner.weekPoints }} P</div>
+                                </div>
+                            </div>
+
+                            <div style="margin-top:14px">
+                                <div class="pk-row">
+                                    <div class="pk-label"><b>今日打卡 {{ me.todayCheckins }}</b><b>{{ partner.todayCheckins }}</b></div>
+                                    <div class="pk-track">
+                                        <div class="mine" :style="{width: pkPercent(me.todayCheckins, partner.todayCheckins) + '%'}"></div>
+                                        <div class="theirs" :style="{width: (100 - pkPercent(me.todayCheckins, partner.todayCheckins)) + '%'}"></div>
+                                    </div>
+                                </div>
+                                <div class="pk-row">
+                                    <div class="pk-label"><b>今日任务 {{ me.todayTasksDone }}</b><b>{{ partner.todayTasksDone }}</b></div>
+                                    <div class="pk-track">
+                                        <div class="mine" :style="{width: pkPercent(me.todayTasksDone, partner.todayTasksDone) + '%'}"></div>
+                                        <div class="theirs" :style="{width: (100 - pkPercent(me.todayTasksDone, partner.todayTasksDone)) + '%'}"></div>
+                                    </div>
+                                </div>
+                                <div class="pk-row">
+                                    <div class="pk-label"><b>今日专注 {{ me.todayFocusMinutes }}′</b><b>{{ partner.todayFocusMinutes }}′</b></div>
+                                    <div class="pk-track">
+                                        <div class="mine" :style="{width: pkPercent(me.todayFocusMinutes, partner.todayFocusMinutes) + '%'}"></div>
+                                        <div class="theirs" :style="{width: (100 - pkPercent(me.todayFocusMinutes, partner.todayFocusMinutes)) + '%'}"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-row" style="margin-top:14px">
+                                <button class="btn-sm" @click="visitPartner">🛸 访问 TA 的星球</button>
+                                <button class="btn-sm" @click="sendNudge('CHEER')">👏 加油</button>
+                                <button class="btn-sm btn-gold" @click="sendNudge('POKE')">👉 催学习</button>
+                            </div>
+                            <div class="form-row">
+                                <input type="text" v-model.trim="nudgeMessage" placeholder="附加一句话（可选）" style="flex:1">
+                                <span class="link" @click="unbindPartner" style="align-self:center;font-size:12px;color:var(--dim);cursor:pointer">解绑</span>
+                            </div>
+                        </div>
+
                         <div class="card">
                             <h3>📰 {{ partner.nickname }} 的动态</h3>
                             <p class="muted" v-if="!partnerFeed.length">TA 最近没有任何动静……要不要催一下？</p>
@@ -413,37 +420,46 @@
                                 <span class="when">{{ fmtTime(n.createdAt) }}</span>
                             </div>
                         </div>
+
+                        <div class="card">
+                            <h3>📈 双人专注对比（近 7 天）</h3>
+                            <div id="compareChart" class="chart-sm"></div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- ===== 数据舱 ===== -->
+                <template v-if="panel === 'stats'">
+                    <div class="card" v-if="recentFailures.length">
+                        <div class="fail-banner" style="margin-bottom:0">
+                            💥 <b>陨石撞击记录</b>（写复盘可以修复星球）
+                            <ul>
+                                <li v-for="f in recentFailures.slice(0,5)" :key="f.id">
+                                    {{ f.reason }}（{{ f.delta }} P）
+                                </li>
+                            </ul>
+                        </div>
                     </div>
 
                     <div class="card">
-                        <h3>📈 双人趋势对比（近 7 天专注分钟）</h3>
-                        <div id="compareChart" class="chart-sm"></div>
+                        <h3>
+                            📊 趋势
+                            <button class="btn-sm btn-ghost" :class="{'active-preset': statsRange==='week'}" @click="loadStats('week')">近 7 天</button>
+                            <button class="btn-sm btn-ghost" :class="{'active-preset': statsRange==='month'}" @click="loadStats('month')">近 30 天</button>
+                        </h3>
+                        <div class="stat-chips" v-if="statsTotals" style="margin-bottom:12px">
+                            <div class="stat-chip"><div class="v" style="color:var(--cyan)">{{ statsTotals.checkins }}</div><div class="k">打卡</div></div>
+                            <div class="stat-chip"><div class="v" style="color:var(--gold)">{{ statsTotals.tasksDone }}</div><div class="k">任务</div></div>
+                            <div class="stat-chip"><div class="v" style="color:var(--purple)">{{ statsTotals.focusMinutes }}′</div><div class="k">专注</div></div>
+                        </div>
+                        <div id="trendChart" class="chart"></div>
                     </div>
-                </div>
-            </div>
 
-            <!-- ================= 数据舱 ================= -->
-            <div v-if="view==='stats'">
-                <div class="card">
-                    <h3>
-                        📊 趋势
-                        <button class="btn-sm btn-ghost" :class="{'active-preset': statsRange==='week'}" @click="loadStats('week')">近 7 天</button>
-                        <button class="btn-sm btn-ghost" :class="{'active-preset': statsRange==='month'}" @click="loadStats('month')">近 30 天</button>
-                    </h3>
-                    <p class="muted" v-if="statsTotals">
-                        打卡 {{ statsTotals.checkins }} 次 · 完成任务 {{ statsTotals.tasksDone }} 个 ·
-                        专注 {{ statsTotals.focusMinutes }} 分钟 ·
-                        <b style="color:var(--coral)">失败 {{ statsTotals.failures }} 次</b>
-                    </p>
-                    <div id="trendChart" class="chart"></div>
-                </div>
-
-                <div class="grid-2">
                     <div class="card">
                         <h3>📝 今日复盘</h3>
                         <textarea v-model="reviewContent" placeholder="今天完成了什么？失败的原因？明天怎么改进？"></textarea>
-                        <button style="margin-top:12px" @click="saveReview">保存复盘</button>
-                        <h3 style="margin-top:22px">🗂 历史复盘</h3>
+                        <button style="margin-top:10px" @click="saveReview">保存复盘（修复星球）</button>
+                        <h3 style="margin-top:20px">🗂 历史复盘</h3>
                         <p class="muted" v-if="!reviews.length">暂无复盘记录</p>
                         <div class="review-item" v-for="r in reviews" :key="r.id">
                             <b>{{ r.reviewDate }}</b>
@@ -459,7 +475,10 @@
                                 <div class="muted">{{ a.description }}</div>
                             </div>
                         </div>
-                        <h3 style="margin-top:22px">💰 积分流水</h3>
+                    </div>
+
+                    <div class="card">
+                        <h3>💰 积分流水</h3>
                         <div class="item-row" v-for="p in (profile ? profile.recentPoints : [])" :key="p.id">
                             <span class="title" style="font-size:12.5px">{{ kindIcon(p.kind) }} {{ p.reason }}</span>
                             <span class="pt-delta num" :class="p.kind === 'REDEEM' ? 'redeem' : (p.delta >= 0 ? 'plus' : 'minus')">
@@ -467,10 +486,11 @@
                             </span>
                         </div>
                     </div>
-                </div>
+                </template>
+
             </div>
-        </main>
-    </div>
+        </aside>
+    </transition>
 </div>
 <script src="/app.js"></script>
 </body>

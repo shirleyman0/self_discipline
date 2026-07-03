@@ -32,6 +32,11 @@ public class Habit {
     @Column(length = 10)
     private String color;
 
+    /** 分类：决定星球上长出什么建筑 */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private HabitCategory category = HabitCategory.LIFE;
+
     @Column(nullable = false)
     private boolean archived = false;
 

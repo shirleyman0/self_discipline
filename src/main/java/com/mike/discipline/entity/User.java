@@ -44,6 +44,10 @@ public class User {
     @Column(unique = true, length = 10)
     private String inviteCode;
 
+    /** 星球名字 */
+    @Column(length = 30)
+    private String planetName;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }
