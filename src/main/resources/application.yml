@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    # createDatabaseIfNotExist=true：首次启动自动创建 discipline 库
+    url: ${DB_URL:jdbc:mysql://localhost:3306/discipline?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true}
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:qazwsxedc123}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    time-zone: Asia/Shanghai
+
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  jwt:
+    # 部署到服务器时务必用环境变量 JWT_SECRET 覆盖（至少 32 字节）
+    secret: ${JWT_SECRET:self-discipline-dev-secret-key-please-override-in-prod}
+    expire-hours: ${JWT_EXPIRE_HOURS:720}
+
+logging:
+  level:
+    com.mike.discipline: INFO

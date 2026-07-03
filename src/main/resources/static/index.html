@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自律星球</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+</head>
+<body>
+<div id="app" v-cloak>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="logo">🪐 自律星球</div>
+            <nav>
+                <a :class="{active: view==='today'}" @click="go('today')">📋 今日</a>
+                <a :class="{active: view==='habits'}" @click="go('habits')">🔥 习惯</a>
+                <a :class="{active: view==='tasks'}" @click="go('tasks')">✅ 任务</a>
+                <a :class="{active: view==='pomodoro'}" @click="go('pomodoro')">🍅 番茄钟</a>
+                <a :class="{active: view==='stats'}" @click="go('stats')">📊 统计复盘</a>
+            </nav>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <h2>{{ viewTitle }}</h2>
+                <div class="user-chip" v-if="profile">
+                    <span>{{ profile.nickname }}</span>
+                    <span class="lv">Lv.{{ profile.level }}</span>
+                    <span class="pts">{{ profile.points }} 分</span>
+                    <span class="link" @click="logout">退出</span>
+                </div>
+            </div>
+
+            <!-- ===== 今日看板 ===== -->
+            <div v-if="view==='today'">
+                <div class="fail-banner" v-if="recentFailures.length">
+                    ⚠️ <b>最近的失败记录</b>（去「统计复盘」写下原因）：
+                    <ul>
+                        <li v-for="f in recentFailures.slice(0,5)" :key="f.id">
+                            {{ f.reason }}（{{ f.delta }} 分，{{ fmtTime(f.createdAt) }}）
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="card" v-if="profile">
+                    <h3>⭐ Lv.{{ profile.level }} · {{ profile.xp }} XP · {{ profile.points }} 积分</h3>
+                    <div class="level-bar">
+                        <div class="level-bar-fill" :style="{width: levelPercent + '%'}"></div>
+                    </div>
+                    <p class="muted" style="margin-top:6px">
+                        距离 Lv.{{ profile.level + 1 }} 还需
+                        {{ profile.levelProgress.needed - profile.levelProgress.current }} XP ·
+                        今日专注 {{ focusToday.minutes }} 分钟（{{ focusToday.count }} 个番茄钟）
+                    </p>
+                </div>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>🔥 今日打卡</h3>
+                        <p class="muted" v-if="!habits.length">还没有习惯，去「习惯」页添加一个吧</p>
+                        <div class="item-row" v-for="h in habits" :key="h.id">
+                            <span class="title">{{ h.icon }} {{ h.name }}
+                                <span class="streak-badge" v-if="h.streak > 0">🔥 {{ h.streak }} 天</span>
+                            </span>
+                            <button class="btn-sm btn-success" v-if="!h.checkedToday" @click="checkin(h)">打卡</button>
+                            <span class="muted" v-else>✅ 已打卡</span>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>✅ 今日任务</h3>
+                        <p class="muted" v-if="!todayTasks.length">今天没有任务，去「任务」页安排一下</p>
+                        <div class="item-row" v-for="t in todayTasks" :key="t.id">
+                            <span class="title" :class="{done: t.status==='DONE'}">
+                                <span class="tag" :class="t.status">{{ typeLabel(t.type) }}</span>{{ t.title }}
+                            </span>
+                            <button class="btn-sm" v-if="t.status==='PENDING'" @click="completeTask(t)">完成 +{{ t.points }}</button>
+                            <span class="muted" v-else-if="t.status==='DONE'">已完成</span>
+                            <span class="tag FAILED" v-else>已失败</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 习惯 ===== -->
+            <div v-if="view==='habits'">
+                <div class="card">
+                    <h3>新建习惯</h3>
+                    <div class="form-row">
+                        <input type="text" v-model.trim="habitForm.name" placeholder="习惯名称，如：背 50 个单词">
+                        <input style="width:70px" v-model.trim="habitForm.icon" placeholder="📚">
+                        <button class="btn" @click="addHabit">添加</button>
+                    </div>
+                    <p class="muted">打卡 +10 XP / +10 积分；连续 7 天 +30，连续 30 天 +100</p>
+                </div>
+
+                <div class="card">
+                    <h3>我的习惯</h3>
+                    <p class="muted" v-if="!habits.length">暂无习惯</p>
+                    <div class="item-row" v-for="h in habits" :key="h.id">
+                        <span class="title">{{ h.icon }} {{ h.name }}
+                            <span class="streak-badge" v-if="h.streak > 0">🔥 连续 {{ h.streak }} 天</span>
+                        </span>
+                        <button class="btn-sm btn-ghost" @click="showHeatmap(h)">热力图</button>
+                        <button class="btn-sm btn-success" v-if="!h.checkedToday" @click="checkin(h)" style="margin-left:8px">打卡</button>
+                        <span class="muted" v-else style="margin-left:8px">✅</span>
+                        <button class="btn-sm btn-danger" @click="removeHabit(h)" style="margin-left:8px">删除</button>
+                    </div>
+                </div>
+
+                <div class="card" v-if="heatmapHabit">
+                    <h3>{{ heatmapHabit.icon }} {{ heatmapHabit.name }} · {{ heatmapYear }} 年打卡热力图</h3>
+                    <div id="heatmap" class="chart-sm"></div>
+                </div>
+            </div>
+
+            <!-- ===== 任务 ===== -->
+            <div v-if="view==='tasks'">
+                <div class="card">
+                    <h3>新建任务</h3>
+                    <div class="form-row">
+                        <input type="text" v-model.trim="taskForm.title" placeholder="任务内容，如：刷 10 道算法题">
+                        <select v-model="taskForm.type">
+                            <option value="DAILY">每日</option>
+                            <option value="WEEKLY">每周</option>
+                            <option value="ONCE">一次性</option>
+                        </select>
+                        <input type="date" v-model="taskForm.dueDate" v-if="taskForm.type==='ONCE'">
+                        <input type="number" style="width:90px" v-model.number="taskForm.points" min="1" placeholder="积分">
+                        <button class="btn" @click="addTask">添加</button>
+                    </div>
+                    <p class="muted">完成 = 加对应积分和 XP；到期未完成 = 每日 0 点结算时<b>扣除同等积分</b>并记入失败记录</p>
+                </div>
+
+                <div class="card" v-for="group in taskGroups" :key="group.type">
+                    <h3>{{ group.label }}</h3>
+                    <p class="muted" v-if="!group.items.length">暂无</p>
+                    <div class="item-row" v-for="t in group.items" :key="t.id">
+                        <span class="title" :class="{done: t.status==='DONE'}">
+                            <span class="tag" :class="t.status">{{ statusLabel(t.status) }}</span>
+                            {{ t.title }}
+                            <span class="muted" v-if="t.dueDate">（截止 {{ t.dueDate }}）</span>
+                            <span class="muted">+{{ t.points }}分</span>
+                        </span>
+                        <button class="btn-sm" v-if="t.status==='PENDING'" @click="completeTask(t)">完成</button>
+                        <button class="btn-sm btn-danger" @click="removeTask(t)" style="margin-left:8px">删除</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 番茄钟 ===== -->
+            <div v-if="view==='pomodoro'">
+                <div class="card pomodoro">
+                    <div class="time">{{ timerDisplay }}</div>
+                    <p class="muted" style="margin-top:8px">
+                        {{ timerRunning ? '专注中，别切走…' : '选择时长，开始专注' }}
+                    </p>
+                    <div class="presets" v-if="!timerRunning && !timerPaused">
+                        <button class="btn-sm" :class="{'btn-ghost': pomoMinutes!==m}"
+                                v-for="m in [25, 45, 60]" :key="m"
+                                @click="pomoMinutes = m; resetTimer()">{{ m }} 分钟</button>
+                        <input type="number" style="width:80px;padding:4px 8px" v-model.number="pomoMinutes"
+                               min="1" max="480" @change="resetTimer">
+                        <select v-model="pomoTaskId">
+                            <option :value="null">不关联任务</option>
+                            <option v-for="t in pendingTasks" :key="t.id" :value="t.id">{{ t.title }}</option>
+                        </select>
+                    </div>
+                    <div class="controls">
+                        <button class="btn btn-success" v-if="!timerRunning" @click="startTimer">
+                            {{ timerPaused ? '继续' : '开始专注' }}
+                        </button>
+                        <button class="btn" v-else @click="pauseTimer">暂停</button>
+                        <button class="btn btn-ghost" @click="resetTimer" v-if="timerRunning || timerPaused">放弃</button>
+                    </div>
+                    <p class="muted" style="margin-top:16px">
+                        今日已专注 {{ focusToday.minutes }} 分钟 · {{ focusToday.count }} 个番茄钟（≥25 分钟 +5 积分）
+                    </p>
+                </div>
+
+                <div class="card" v-if="focusToday.sessions && focusToday.sessions.length">
+                    <h3>今日专注记录</h3>
+                    <div class="item-row" v-for="s in focusToday.sessions" :key="s.id">
+                        <span class="title">🍅 {{ s.durationMinutes }} 分钟</span>
+                        <span class="muted">{{ fmtTime(s.startTime) }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 统计复盘 ===== -->
+            <div v-if="view==='stats'">
+                <div class="card">
+                    <h3>
+                        趋势
+                        <button class="btn-sm" :class="{'btn-ghost': statsRange!=='week'}" @click="loadStats('week')" style="margin-left:12px">近 7 天</button>
+                        <button class="btn-sm" :class="{'btn-ghost': statsRange!=='month'}" @click="loadStats('month')" style="margin-left:6px">近 30 天</button>
+                    </h3>
+                    <p class="muted" v-if="statsTotals">
+                        打卡 {{ statsTotals.checkins }} 次 · 完成任务 {{ statsTotals.tasksDone }} 个 ·
+                        专注 {{ statsTotals.focusMinutes }} 分钟 ·
+                        <b style="color:var(--danger)">失败 {{ statsTotals.failures }} 次</b>
+                    </p>
+                    <div id="trendChart" class="chart"></div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>📝 今日复盘</h3>
+                        <textarea v-model="reviewContent" placeholder="今天完成了什么？失败的原因是什么？明天怎么改进？"></textarea>
+                        <button class="btn" style="margin-top:10px" @click="saveReview">保存复盘</button>
+                        <h3 style="margin-top:20px">历史复盘</h3>
+                        <p class="muted" v-if="!reviews.length">暂无复盘记录</p>
+                        <div v-for="r in reviews" :key="r.id" style="margin-bottom:12px">
+                            <b>{{ r.reviewDate }}</b>
+                            <p style="white-space:pre-wrap;font-size:14px">{{ r.content }}</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>🏆 成就（{{ earnedCount }}/{{ profile ? profile.achievements.length : 0 }}）</h3>
+                        <div class="achv-grid" v-if="profile">
+                            <div class="achv" :class="{earned: a.earned}" v-for="a in profile.achievements" :key="a.code">
+                                <div class="achv-title">{{ a.earned ? '🏅' : '🔒' }} {{ a.title }}</div>
+                                <div class="muted">{{ a.description }}</div>
+                            </div>
+                        </div>
+                        <h3 style="margin-top:20px">积分流水</h3>
+                        <div class="item-row" v-for="p in (profile ? profile.recentPoints : [])" :key="p.id">
+                            <span class="title" style="font-size:13px">{{ p.reason }}</span>
+                            <b :style="{color: p.delta >= 0 ? 'var(--success)' : 'var(--danger)'}">
+                                {{ p.delta >= 0 ? '+' : '' }}{{ p.delta }}
+                            </b>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

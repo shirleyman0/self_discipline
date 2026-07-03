@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 自律星球</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
+</head>
+<body class="auth-body">
+<div id="app" v-cloak>
+    <div class="auth-card">
+        <h1 class="auth-title">🪐 自律星球</h1>
+        <p class="auth-sub">监督你的每一天</p>
+
+        <div class="auth-tabs">
+            <button :class="{active: mode==='login'}" @click="mode='login'">登录</button>
+            <button :class="{active: mode==='register'}" @click="mode='register'">注册</button>
+        </div>
+
+        <form @submit.prevent="submit">
+            <input v-model.trim="form.username" placeholder="用户名（至少 3 位）" required>
+            <input v-model="form.password" type="password" placeholder="密码（至少 6 位）" required>
+            <input v-if="mode==='register'" v-model.trim="form.nickname" placeholder="昵称（可选）">
+            <p class="auth-error" v-if="error">{{ error }}</p>
+            <button class="btn-primary" type="submit" :disabled="loading">
+                {{ loading ? '请稍候…' : (mode === 'login' ? '登录' : '注册并登录') }}
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+const { createApp } = Vue;
+createApp({
+    data() {
+        return {
+            mode: 'login',
+            form: { username: '', password: '', nickname: '' },
+            error: '',
+            loading: false
+        };
+    },
+    methods: {
+        async submit() {
+            this.error = '';
+            this.loading = true;
+            try {
+                const res = await fetch('/api/auth/' + this.mode, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.form)
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    this.error = data.message || '操作失败';
+                    return;
+                }
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                location.href = '/index.html';
+            } catch (e) {
+                this.error = '网络错误，请确认服务已启动';
+            } finally {
+                this.loading = false;
+            }
+        }
+    }
+}).mount('#app');
+</script>
+</body>
+</html>
