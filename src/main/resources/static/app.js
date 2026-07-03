@@ -1,17 +1,13 @@
-// ===== 自律星球 前端逻辑（YoRHa 主题） =====
+// ===== 自律星球 前端逻辑（深空养成主题） =====
 const TOKEN = localStorage.getItem('token');
 if (!TOKEN) {
     location.href = '/login.html';
 }
 
-// YoRHa 配色（与 style.css 保持一致）
+// 主题色（与 style.css 一致）
 const C = {
-    ink: '#454138',
-    inkSoft: '#6e6a5e',
-    inkFaint: 'rgba(69,65,56,.14)',
-    paper: '#d1cdb7',
-    alert: '#b0563f',
-    gold: '#937f4e'
+    cyan: '#57e6d5', gold: '#ffd166', purple: '#a78bfa', coral: '#ff6b81',
+    blue: '#60a5fa', dim: '#8b94c6', border: 'rgba(120,140,220,.25)', bg: '#1a2148'
 };
 
 /** fetch 封装：带 token；401 跳登录；非 2xx 抛错 */
@@ -38,24 +34,53 @@ async function api(path, options = {}) {
 }
 
 const VIEW_TITLES = {
-    today: '作战简报 / BRIEFING',
-    habits: '日常协议 / PROTOCOL',
-    tasks: '任务档案 / QUEST LOG',
-    pomodoro: '专注作战 / FOCUS OP.',
-    stats: '作战记录 / ARCHIVE'
+    base: { icon: '🪐', name: '星球基地', sub: '你的星球正在因为你的自律而成长' },
+    habits: { icon: '✅', name: '每日打卡', sub: '连续打卡，能量翻倍' },
+    tasks: { icon: '📋', name: '任务清单', sub: '完成拿积分，拖延掉积分' },
+    focus: { icon: '⏱️', name: '专注舱', sub: '进入心流，屏蔽整个宇宙' },
+    shop: { icon: '🛍️', name: '奖励商店', sub: '攒的积分，痛快花掉' },
+    partner: { icon: '👥', name: '共航搭档', sub: '互相监督，每周 PK' },
+    stats: { icon: '📊', name: '数据舱', sub: '复盘让下一周更强' }
 };
 
-// 标题解码动画用字符集
-const SCRAMBLE_CHARS = '01ABCDEF■□◆◇/\\|-_';
+// 星球进化阶段
+const TIERS = {
+    1: { name: '星尘', desc: '一切从一粒尘埃开始' },
+    2: { name: '陨石', desc: '开始有了形状' },
+    3: { name: '小行星', desc: '在轨道上站稳了脚跟' },
+    4: { name: '岩石行星', desc: '坚硬的核心正在形成' },
+    5: { name: '海洋行星', desc: '生命的摇篮出现了' },
+    6: { name: '翠绿行星', desc: '万物生长，欣欣向荣' },
+    7: { name: '文明行星', desc: '夜晚的灯火属于你的坚持' },
+    8: { name: '恒星', desc: '你已成为照亮别人的光' }
+};
 
-// UI 电子音：短促方波 blip
+const QUOTES = [
+    '自律不是苦行，是把选择权拿回自己手里',
+    '你今天的每一次打卡，都是星球的一次心跳',
+    '不必追求完美的一天，只要比昨天多做一点',
+    '专注 25 分钟，比焦虑 2 小时有用',
+    '拖延的代价明天才付，行动的奖励现在就领',
+    '连续打卡的第 7 天，习惯开始替你工作',
+    '别小看 +10 能量，恒星也是一粒尘埃变的',
+    '真正的对手不是搭档，是昨天的自己',
+    '把大目标拆成小任务，把小任务变成打卡',
+    '休息也是任务的一部分，兑换奖励别手软',
+    '失败记录不可怕，可怕的是不写复盘',
+    '你在专注舱的每一分钟，宇宙都看得见',
+    '积分会花完，但等级永远是你的',
+    '今天的你，是搭档眼里的榜样还是反面教材？',
+    '星球不会一夜进化，但每天都在变'
+];
+
+// UI 音效：柔和正弦 blip
 let audioCtx = null;
-function blip(freq = 1320, duration = 0.045, volume = 0.06) {
+function blip(freq = 1200, duration = 0.06, volume = 0.05) {
     try {
         audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = 'square';
+        osc.type = 'sine';
         osc.frequency.value = freq;
         osc.connect(gain);
         gain.connect(audioCtx.destination);
@@ -63,7 +88,25 @@ function blip(freq = 1320, duration = 0.045, volume = 0.06) {
         gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
         osc.start();
         osc.stop(audioCtx.currentTime + duration);
-    } catch (e) { /* 忽略音频错误 */ }
+    } catch (e) { /* 忽略 */ }
+}
+
+// 生成星空
+function makeStars() {
+    const wrap = document.getElementById('stars');
+    if (!wrap) return;
+    for (let i = 0; i < 90; i++) {
+        const s = document.createElement('span');
+        s.className = 'star';
+        const size = Math.random() < 0.85 ? 1 : 2;
+        s.style.width = s.style.height = size + 'px';
+        s.style.left = Math.random() * 100 + '%';
+        s.style.top = Math.random() * 100 + '%';
+        s.style.animationDelay = (Math.random() * 3).toFixed(2) + 's';
+        s.style.animationDuration = (2 + Math.random() * 3).toFixed(2) + 's';
+        if (Math.random() < 0.12) s.style.background = '#ffd166';
+        wrap.appendChild(s);
+    }
 }
 
 const { createApp } = Vue;
@@ -71,9 +114,7 @@ const { createApp } = Vue;
 createApp({
     data() {
         return {
-            view: location.hash.slice(1) || 'today',
-            displayTitle: '',
-            scrambleHandle: null,
+            view: location.hash.slice(1) || 'base',
             profile: null,
             habits: [],
             tasks: [],
@@ -81,9 +122,23 @@ createApp({
             focusToday: { minutes: 0, count: 0, sessions: [] },
             toasts: [],
             toastSeq: 0,
+            quote: QUOTES[Math.floor(Date.now() / 86400000) % QUOTES.length],
             // 表单
             habitForm: { name: '', icon: '' },
             taskForm: { title: '', type: 'DAILY', dueDate: '', points: 20 },
+            rewardForm: { name: '', icon: '', cost: 100 },
+            // 商店
+            rewards: [],
+            // 搭档
+            inviteCode: '',
+            bindCode: '',
+            me: null,
+            partner: null,
+            nudges: [],
+            unreadNudges: 0,
+            latestNudge: null,
+            partnerFeed: [],
+            nudgeMessage: '',
             // 热力图
             heatmapHabit: null,
             heatmapYear: new Date().getFullYear(),
@@ -105,17 +160,12 @@ createApp({
 
     computed: {
         viewTitle() {
-            return VIEW_TITLES[this.view] || '';
+            return VIEW_TITLES[this.view] || VIEW_TITLES.base;
         },
         levelPercent() {
             if (!this.profile) return 0;
             const p = this.profile.levelProgress;
             return p.needed === 0 ? 100 : Math.min(100, Math.round(p.current * 100 / p.needed));
-        },
-        /** XP 进度切成 24 个方块 */
-        xpSegments() {
-            const filled = Math.round(this.levelPercent / 100 * 24);
-            return Array.from({ length: 24 }, (_, i) => i < filled);
         },
         recentFailures() {
             return this.profile ? this.profile.recentFailures : [];
@@ -123,19 +173,33 @@ createApp({
         earnedCount() {
             return this.profile ? this.profile.achievements.filter(a => a.earned).length : 0;
         },
+        checkedCount() {
+            return this.habits.filter(h => h.checkedToday).length;
+        },
+        doneTodayCount() {
+            return this.todayTasks.filter(t => t.status === 'DONE').length;
+        },
         pendingTasks() {
             return this.todayTasks.filter(t => t.status === 'PENDING');
+        },
+        partnerName() {
+            return this.partner ? this.partner.nickname : '';
         },
         timerDisplay() {
             const m = Math.floor(this.remainingSeconds / 60);
             const s = this.remainingSeconds % 60;
             return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
         },
+        ringPercent() {
+            const total = this.pomoMinutes * 60;
+            if (!total) return 0;
+            return Math.round((total - this.remainingSeconds) / total * 100);
+        },
         taskGroups() {
             const groups = [
-                { type: 'DAILY', label: '每日任务（0 点重置，未完成扣 P）', items: [] },
-                { type: 'WEEKLY', label: '每周任务（周一重置）', items: [] },
-                { type: 'ONCE', label: '单次任务', items: [] }
+                { type: 'DAILY', label: '📅 每日任务（每晚 0 点重置，未完成扣分）', items: [] },
+                { type: 'WEEKLY', label: '🗓️ 每周任务（周一重置）', items: [] },
+                { type: 'ONCE', label: '🎯 一次性任务', items: [] }
             ];
             for (const t of this.tasks) {
                 const g = groups.find(g => g.type === t.type);
@@ -146,37 +210,43 @@ createApp({
     },
 
     methods: {
+        // ---- 星球阶段 ----
+        tierOf(level) {
+            if (level >= 10) return 8;
+            if (level >= 8) return 7;
+            if (level >= 6) return 6;
+            return Math.max(1, Math.min(level, 5));
+        },
+        tierInfo(level) {
+            return TIERS[this.tierOf(level)];
+        },
+        planetClass(level) {
+            const t = this.tierOf(level);
+            return ['t' + t, t >= 6 ? 'ringed' : ''];
+        },
+        pkPercent(mine, theirs) {
+            const a = Math.max(0, mine), b = Math.max(0, theirs);
+            if (a + b === 0) return 50;
+            return Math.round(a * 100 / (a + b));
+        },
+        kindIcon(kind) {
+            return {
+                CHECKIN: '✅', TASK: '📋', FOCUS: '⏱️', ACHIEVEMENT: '🏅',
+                STREAK: '🔥', PUNISH: '💥', REDEEM: '🛍️'
+            }[kind] || '✨';
+        },
+
         go(view) {
             blip();
             this.view = view;
             location.hash = view;
-            this.scrambleTitle();
             if (view === 'stats') {
                 this.loadStats(this.statsRange);
                 this.loadReviews();
             }
-            if (view === 'habits') {
-                this.heatmapHabit = null;
-            }
-        },
-
-        /** 标题解码动画：乱码逐位落定 */
-        scrambleTitle() {
-            clearInterval(this.scrambleHandle);
-            const target = this.viewTitle;
-            let frame = 0;
-            const totalFrames = 14;
-            this.scrambleHandle = setInterval(() => {
-                frame++;
-                const solved = Math.floor(target.length * frame / totalFrames);
-                this.displayTitle = target.slice(0, solved) +
-                    Array.from({ length: target.length - solved },
-                        () => SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)]).join('');
-                if (frame >= totalFrames) {
-                    this.displayTitle = target;
-                    clearInterval(this.scrambleHandle);
-                }
-            }, 28);
+            if (view === 'habits') this.heatmapHabit = null;
+            if (view === 'shop') this.loadRewards();
+            if (view === 'partner') this.loadPartner(true);
         },
 
         logout() {
@@ -189,11 +259,9 @@ createApp({
             if (!iso) return '';
             return String(iso).replace('T', ' ').slice(5, 16);
         },
-
         typeLabel(t) {
             return { DAILY: '每日', WEEKLY: '每周', ONCE: '单次' }[t] || t;
         },
-
         statusLabel(s) {
             return { PENDING: '进行中', DONE: '完成', FAILED: '失败' }[s] || s;
         },
@@ -201,7 +269,7 @@ createApp({
         toast(msg, alert = false) {
             const id = ++this.toastSeq;
             this.toasts.push({ id, msg, alert });
-            blip(alert ? 440 : 1760, 0.06);
+            blip(alert ? 520 : 1560, 0.08);
             setTimeout(() => {
                 this.toasts = this.toasts.filter(t => t.id !== id);
             }, 3200);
@@ -221,18 +289,41 @@ createApp({
         async loadFocus() {
             this.focusToday = await api('/api/focus/today');
         },
+        async loadRewards() {
+            this.rewards = await api('/api/rewards');
+        },
+        async loadPartner(withDetails = false) {
+            const data = await api('/api/partner');
+            this.inviteCode = data.inviteCode;
+            this.me = data.me;
+            this.partner = data.partner;
+            this.nudges = data.nudges || [];
+            if (data.unreadNudges > 0) {
+                // 只有新消息才在首页横幅展示
+                this.latestNudge = this.nudges[0] || null;
+                this.toast(`🔔 搭档给你发来了 ${data.unreadNudges} 条消息`);
+            }
+            this.unreadNudges = 0; // 后端已标记已读
+            if (withDetails && this.partner) {
+                this.partnerFeed = await api('/api/partner/feed');
+                this.renderCompare();
+            }
+        },
         async loadAll() {
-            await Promise.all([this.loadProfile(), this.loadHabits(), this.loadTasks(), this.loadFocus()]);
+            await Promise.all([
+                this.loadProfile(), this.loadHabits(), this.loadTasks(),
+                this.loadFocus(), this.loadPartner()
+            ]);
         },
 
-        // ---- 日常协议 ----
+        // ---- 习惯 ----
         async addHabit() {
             if (!this.habitForm.name) return;
             try {
                 await api('/api/habits', { method: 'POST', body: JSON.stringify(this.habitForm) });
                 this.habitForm = { name: '', icon: '' };
                 await this.loadHabits();
-                this.toast('协议已登记');
+                this.toast('✅ 新习惯已创建，今天就打个卡吧');
             } catch (e) {
                 this.toast(e.message, true);
             }
@@ -241,17 +332,16 @@ createApp({
             try {
                 const r = await api(`/api/habits/${habit.id}/checkin`, { method: 'POST', body: '{}' });
                 await Promise.all([this.loadHabits(), this.loadProfile()]);
-                this.toast(`协议执行完毕 — STREAK ${r.streak} — +10 XP +10 P`);
+                this.toast(`🔥 打卡成功！连续 ${r.streak} 天 · 星球获得 10 能量`);
             } catch (e) {
                 this.toast(e.message, true);
             }
         },
         async removeHabit(habit) {
-            if (!confirm(`确定废止协议「${habit.name}」？历史执行记录会保留。`)) return;
+            if (!confirm(`确定删除习惯「${habit.name}」？历史打卡记录会保留。`)) return;
             await api(`/api/habits/${habit.id}`, { method: 'DELETE' });
             if (this.heatmapHabit && this.heatmapHabit.id === habit.id) this.heatmapHabit = null;
             await this.loadHabits();
-            this.toast('协议已废止');
         },
         async showHeatmap(habit) {
             blip();
@@ -262,15 +352,15 @@ createApp({
                 const chart = echarts.getInstanceByDom(el) || echarts.init(el);
                 chart.setOption({
                     tooltip: { formatter: p => p.value[0] },
-                    visualMap: { show: false, min: 0, max: 1, inRange: { color: [C.inkFaint, C.ink] } },
+                    visualMap: { show: false, min: 0, max: 1, inRange: { color: ['rgba(120,140,220,.15)', C.cyan] } },
                     calendar: {
                         range: String(this.heatmapYear),
                         cellSize: ['auto', 14],
                         left: 40, right: 10, top: 30,
-                        itemStyle: { borderWidth: 2, borderColor: C.paper, color: 'rgba(69,65,56,.05)' },
-                        splitLine: { lineStyle: { color: C.ink, width: 1 } },
-                        dayLabel: { nameMap: 'ZH', fontSize: 10, color: C.inkSoft },
-                        monthLabel: { nameMap: 'ZH', fontSize: 10, color: C.inkSoft },
+                        itemStyle: { borderWidth: 2, borderColor: '#141b40', color: 'rgba(120,140,220,.08)' },
+                        splitLine: { lineStyle: { color: C.dim, width: 1 } },
+                        dayLabel: { nameMap: 'ZH', fontSize: 10, color: C.dim },
+                        monthLabel: { nameMap: 'ZH', fontSize: 10, color: C.dim },
                         yearLabel: { show: false }
                     },
                     series: [{ type: 'heatmap', coordinateSystem: 'calendar', data }]
@@ -278,7 +368,7 @@ createApp({
             });
         },
 
-        // ---- 任务档案 ----
+        // ---- 任务 ----
         async addTask() {
             if (!this.taskForm.title) return;
             try {
@@ -287,7 +377,7 @@ createApp({
                 await api('/api/tasks', { method: 'POST', body: JSON.stringify(body) });
                 this.taskForm = { title: '', type: this.taskForm.type, dueDate: '', points: 20 };
                 await this.loadTasks();
-                this.toast('任务已部署');
+                this.toast('📋 任务已创建');
             } catch (e) {
                 this.toast(e.message, true);
             }
@@ -296,21 +386,110 @@ createApp({
             try {
                 await api(`/api/tasks/${task.id}/complete`, { method: 'POST' });
                 await Promise.all([this.loadTasks(), this.loadProfile()]);
-                this.toast(`任务完成 — 获得赏金 +${task.points} XP +${task.points} P`);
+                this.toast(`🎉 任务完成！星球获得 ${task.points} 能量 +${task.points} P`);
             } catch (e) {
                 this.toast(e.message, true);
             }
         },
         async removeTask(task) {
-            if (!confirm(`确定销毁任务「${task.title}」？`)) return;
+            if (!confirm(`确定删除任务「${task.title}」？`)) return;
             await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
             await this.loadTasks();
-            this.toast('任务已销毁');
         },
 
-        // ---- 专注作战 ----
+        // ---- 商店 ----
+        async addReward() {
+            if (!this.rewardForm.name || !this.rewardForm.cost) return;
+            try {
+                await api('/api/rewards', { method: 'POST', body: JSON.stringify(this.rewardForm) });
+                this.rewardForm = { name: '', icon: '', cost: 100 };
+                await this.loadRewards();
+                this.toast('🛍️ 奖励已上架');
+            } catch (e) {
+                this.toast(e.message, true);
+            }
+        },
+        async redeem(reward) {
+            if (!confirm(`确定花 ${reward.cost} P 兑换「${reward.name}」？`)) return;
+            try {
+                const r = await api(`/api/rewards/${reward.id}/redeem`, { method: 'POST' });
+                await this.loadProfile();
+                this.toast(`🎁 兑换成功，好好享受「${reward.name}」！余额 ${r.balance} P`);
+            } catch (e) {
+                this.toast(e.message, true);
+            }
+        },
+        async removeReward(reward) {
+            if (!confirm(`下架奖励「${reward.name}」？`)) return;
+            await api(`/api/rewards/${reward.id}`, { method: 'DELETE' });
+            await this.loadRewards();
+        },
+
+        // ---- 搭档 ----
+        copyCode() {
+            navigator.clipboard?.writeText(this.inviteCode);
+            this.toast('📋 邀请码已复制，发给你的搭档吧');
+        },
+        async bindPartner() {
+            if (!this.bindCode) return;
+            try {
+                const r = await api('/api/partner/bind', {
+                    method: 'POST',
+                    body: JSON.stringify({ code: this.bindCode })
+                });
+                this.bindCode = '';
+                await this.loadPartner(true);
+                this.toast(`🤝 绑定成功！和 ${r.partnerNickname} 一起加油吧`);
+            } catch (e) {
+                this.toast(e.message, true);
+            }
+        },
+        async unbindPartner() {
+            if (!confirm('确定解除搭档关系？')) return;
+            await api('/api/partner', { method: 'DELETE' });
+            this.partner = null;
+            this.partnerFeed = [];
+            await this.loadPartner();
+            this.toast('已解除绑定');
+        },
+        async sendNudge(type) {
+            try {
+                await api('/api/partner/nudge', {
+                    method: 'POST',
+                    body: JSON.stringify({ type, message: this.nudgeMessage || null })
+                });
+                this.nudgeMessage = '';
+                this.toast(type === 'CHEER' ? '👏 已给搭档送上鼓励' : '👉 已戳搭档，让 TA 快去学习');
+            } catch (e) {
+                this.toast(e.message, true);
+            }
+        },
+        async renderCompare() {
+            try {
+                const data = await api('/api/partner/compare?range=week');
+                this.$nextTick(() => {
+                    const el = document.getElementById('compareChart');
+                    if (!el) return;
+                    const chart = echarts.getInstanceByDom(el) || echarts.init(el);
+                    const dates = data.me.days.map(d => d.date.slice(5));
+                    chart.setOption({
+                        tooltip: { trigger: 'axis', backgroundColor: C.bg, borderColor: C.border, textStyle: { color: '#e9edff', fontSize: 12 } },
+                        legend: { data: ['我', this.partner.nickname], textStyle: { color: C.dim, fontSize: 11 } },
+                        grid: { left: 40, right: 20, bottom: 28, top: 40 },
+                        xAxis: { type: 'category', data: dates, axisLine: { lineStyle: { color: C.dim } }, axisLabel: { color: C.dim, fontSize: 10 } },
+                        yAxis: { type: 'value', axisLabel: { color: C.dim, fontSize: 10 }, splitLine: { lineStyle: { color: 'rgba(120,140,220,.12)' } } },
+                        series: [
+                            { name: '我', type: 'line', smooth: true, data: data.me.days.map(d => d.focusMinutes), itemStyle: { color: C.cyan }, areaStyle: { color: 'rgba(87,230,213,.12)' } },
+                            { name: this.partner.nickname, type: 'line', smooth: true, data: data.partner.days.map(d => d.focusMinutes), itemStyle: { color: C.coral }, areaStyle: { color: 'rgba(255,107,129,.10)' } }
+                        ]
+                    });
+                });
+            } catch (e) { /* 无搭档时忽略 */ }
+        },
+
+        // ---- 番茄钟 ----
         startTimer() {
-            blip(880, 0.08);
+            blip(880, 0.1);
             if (!this.timerPaused) {
                 this.remainingSeconds = this.pomoMinutes * 60;
             }
@@ -318,7 +497,7 @@ createApp({
             this.timerPaused = false;
             this.timerHandle = setInterval(() => {
                 this.remainingSeconds--;
-                document.title = `▶ ${this.timerDisplay} - 自律星球`;
+                document.title = `🚀 ${this.timerDisplay} · 自律星球`;
                 if (this.remainingSeconds <= 0) {
                     this.finishTimer();
                 }
@@ -335,13 +514,13 @@ createApp({
             this.timerRunning = false;
             this.timerPaused = false;
             this.remainingSeconds = this.pomoMinutes * 60;
-            document.title = '自律星球 - SELF DISCIPLINE SYSTEM';
+            document.title = '自律星球 · 用自律养大你的星球';
         },
         async finishTimer() {
             clearInterval(this.timerHandle);
             this.timerRunning = false;
             this.timerPaused = false;
-            document.title = '自律星球 - SELF DISCIPLINE SYSTEM';
+            document.title = '自律星球 · 用自律养大你的星球';
             this.victoryChime();
             try {
                 await api('/api/focus', {
@@ -349,18 +528,17 @@ createApp({
                     body: JSON.stringify({ taskId: this.pomoTaskId, durationMinutes: this.pomoMinutes })
                 });
                 await Promise.all([this.loadFocus(), this.loadProfile()]);
-                this.toast(`作战完成 — 专注 ${this.pomoMinutes} min — 短暂休整`);
+                this.toast(`🛬 着陆成功！专注 ${this.pomoMinutes} 分钟，休息一下吧`);
             } catch (e) {
                 this.toast(e.message, true);
             }
             this.remainingSeconds = this.pomoMinutes * 60;
         },
-        /** 结束时的三连音 */
         victoryChime() {
-            [880, 1108, 1318].forEach((f, i) => setTimeout(() => blip(f, 0.18, 0.1), i * 180));
+            [660, 880, 1108, 1318].forEach((f, i) => setTimeout(() => blip(f, 0.22, 0.09), i * 150));
         },
 
-        // ---- 作战记录 ----
+        // ---- 统计 ----
         async loadStats(range) {
             this.statsRange = range;
             const data = await api(`/api/stats/summary?range=${range}`);
@@ -372,46 +550,35 @@ createApp({
             const el = document.getElementById('trendChart');
             if (!el) return;
             const chart = echarts.getInstanceByDom(el) || echarts.init(el);
-            const axisStyle = {
-                axisLine: { lineStyle: { color: C.ink } },
-                axisLabel: { color: C.inkSoft, fontFamily: 'Menlo, monospace', fontSize: 10 },
-                splitLine: { lineStyle: { color: C.inkFaint } }
+            const axis = {
+                axisLine: { lineStyle: { color: C.dim } },
+                axisLabel: { color: C.dim, fontSize: 10 },
+                splitLine: { lineStyle: { color: 'rgba(120,140,220,.12)' } }
             };
             chart.setOption({
-                tooltip: {
-                    trigger: 'axis',
-                    backgroundColor: C.ink,
-                    borderWidth: 0,
-                    textStyle: { color: C.paper, fontSize: 12 }
-                },
-                legend: {
-                    data: ['专注(min)', '任务完成', '协议执行'],
-                    textStyle: { color: C.inkSoft, fontSize: 11 },
-                    itemWidth: 12, itemHeight: 8
-                },
+                tooltip: { trigger: 'axis', backgroundColor: C.bg, borderColor: C.border, textStyle: { color: '#e9edff', fontSize: 12 } },
+                legend: { data: ['专注(分钟)', '任务完成', '打卡'], textStyle: { color: C.dim, fontSize: 11 } },
                 grid: { left: 44, right: 24, bottom: 30, top: 44 },
-                xAxis: { type: 'category', data: this.statsDays.map(d => d.date.slice(5)), ...axisStyle },
+                xAxis: { type: 'category', data: this.statsDays.map(d => d.date.slice(5)), ...axis },
                 yAxis: [
-                    { type: 'value', name: 'min', nameTextStyle: { color: C.inkSoft }, ...axisStyle },
-                    { type: 'value', name: '次', minInterval: 1, nameTextStyle: { color: C.inkSoft }, ...axisStyle }
+                    { type: 'value', name: '分钟', nameTextStyle: { color: C.dim }, ...axis },
+                    { type: 'value', name: '次数', minInterval: 1, nameTextStyle: { color: C.dim }, ...axis }
                 ],
                 series: [
                     {
-                        name: '专注(min)', type: 'bar',
+                        name: '专注(分钟)', type: 'bar',
                         data: this.statsDays.map(d => d.focusMinutes),
-                        itemStyle: { color: C.ink }, barMaxWidth: 18
+                        itemStyle: { color: C.purple, borderRadius: [4, 4, 0, 0] }, barMaxWidth: 18
                     },
                     {
-                        name: '任务完成', type: 'line', yAxisIndex: 1,
+                        name: '任务完成', type: 'line', yAxisIndex: 1, smooth: true,
                         data: this.statsDays.map(d => d.tasksDone),
-                        itemStyle: { color: C.gold }, lineStyle: { color: C.gold, width: 1.5 },
-                        symbol: 'rect', symbolSize: 6
+                        itemStyle: { color: C.gold }, lineStyle: { width: 2 }
                     },
                     {
-                        name: '协议执行', type: 'line', yAxisIndex: 1,
+                        name: '打卡', type: 'line', yAxisIndex: 1, smooth: true,
                         data: this.statsDays.map(d => d.checkins),
-                        itemStyle: { color: C.alert }, lineStyle: { color: C.alert, width: 1.5, type: 'dashed' },
-                        symbol: 'diamond', symbolSize: 7
+                        itemStyle: { color: C.cyan }, lineStyle: { width: 2 }
                     }
                 ]
             });
@@ -430,7 +597,7 @@ createApp({
                     body: JSON.stringify({ content: this.reviewContent })
                 });
                 await this.loadReviews();
-                this.toast('复盘日志已写入');
+                this.toast('📝 复盘已保存，星球的裂缝修复了一点');
             } catch (e) {
                 this.toast(e.message, true);
             }
@@ -438,7 +605,7 @@ createApp({
     },
 
     async mounted() {
-        this.scrambleTitle();
+        makeStars();
         try {
             await this.loadAll();
         } catch (e) {
@@ -448,6 +615,8 @@ createApp({
             this.loadStats('week');
             this.loadReviews();
         }
+        if (this.view === 'shop') this.loadRewards();
+        if (this.view === 'partner') this.loadPartner(true);
         window.addEventListener('hashchange', () => {
             const v = location.hash.slice(1);
             if (VIEW_TITLES[v] && v !== this.view) this.go(v);

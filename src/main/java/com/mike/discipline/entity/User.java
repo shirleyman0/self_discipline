@@ -37,6 +37,13 @@ public class User {
     @Column(nullable = false)
     private long points = 0;
 
+    /** 共航搭档的用户 id */
+    private Long partnerId;
+
+    /** 搭档邀请码 */
+    @Column(unique = true, length = 10)
+    private String inviteCode;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }

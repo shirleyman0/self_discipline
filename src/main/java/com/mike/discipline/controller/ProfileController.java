@@ -2,6 +2,7 @@ package com.mike.discipline.controller;
 
 import com.mike.discipline.config.CurrentUser;
 import com.mike.discipline.entity.Achievement;
+import com.mike.discipline.entity.PointKind;
 import com.mike.discipline.entity.User;
 import com.mike.discipline.entity.UserAchievement;
 import com.mike.discipline.exception.ApiException;
@@ -73,7 +74,7 @@ public class ProfileController {
                 "needed", nextLevelXp - currentLevelXp));
         result.put("achievements", achievements);
         result.put("recentFailures",
-                pointLogRepository.findTop10ByUserIdAndDeltaLessThanOrderByCreatedAtDesc(userId, 0));
+                pointLogRepository.findTop10ByUserIdAndKindOrderByCreatedAtDesc(userId, PointKind.PUNISH));
         result.put("recentPoints", pointLogRepository.findTop20ByUserIdOrderByCreatedAtDesc(userId));
         return result;
     }

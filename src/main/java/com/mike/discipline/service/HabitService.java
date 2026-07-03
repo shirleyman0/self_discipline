@@ -3,6 +3,7 @@ package com.mike.discipline.service;
 import com.mike.discipline.entity.Achievement;
 import com.mike.discipline.entity.Habit;
 import com.mike.discipline.entity.HabitCheckin;
+import com.mike.discipline.entity.PointKind;
 import com.mike.discipline.exception.ApiException;
 import com.mike.discipline.repository.HabitCheckinRepository;
 import com.mike.discipline.repository.HabitRepository;
@@ -100,18 +101,18 @@ public class HabitService {
         checkinRepository.save(checkin);
 
         gamificationService.reward(userId, GamificationService.CHECKIN_XP,
-                GamificationService.CHECKIN_POINTS, "习惯打卡：" + habit.getName());
+                GamificationService.CHECKIN_POINTS, "习惯打卡：" + habit.getName(), PointKind.CHECKIN);
 
         int streak = streakOf(habitId);
         gamificationService.unlock(userId, Achievement.FIRST_CHECKIN);
         if (streak == 7) {
             gamificationService.reward(userId, GamificationService.STREAK_7_BONUS,
-                    GamificationService.STREAK_7_BONUS, "连续打卡 7 天：" + habit.getName());
+                    GamificationService.STREAK_7_BONUS, "连续打卡 7 天：" + habit.getName(), PointKind.STREAK);
             gamificationService.unlock(userId, Achievement.STREAK_7);
         }
         if (streak == 30) {
             gamificationService.reward(userId, GamificationService.STREAK_30_BONUS,
-                    GamificationService.STREAK_30_BONUS, "连续打卡 30 天：" + habit.getName());
+                    GamificationService.STREAK_30_BONUS, "连续打卡 30 天：" + habit.getName(), PointKind.STREAK);
             gamificationService.unlock(userId, Achievement.STREAK_30);
         }
         return Map.of("streak", streak);

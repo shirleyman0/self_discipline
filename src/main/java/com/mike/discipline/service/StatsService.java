@@ -1,5 +1,6 @@
 package com.mike.discipline.service;
 
+import com.mike.discipline.entity.PointKind;
 import com.mike.discipline.repository.FocusSessionRepository;
 import com.mike.discipline.repository.HabitCheckinRepository;
 import com.mike.discipline.repository.PointLogRepository;
@@ -40,12 +41,12 @@ public class StatsService {
         checkinRepository.findByUserIdAndCheckinDateBetween(userId, startDate, today)
                 .forEach(c -> checkinsByDay.merge(c.getCheckinDate(), 1, Integer::sum));
 
-        // 任务完成数从积分流水统计（reason 以「完成任务」开头），
+        // 任务完成数从积分流水统计（kind=TASK），
         // 因为每日结算会重置 DAILY 任务的 completedAt，直接查 task 表会丢历史
         Map<LocalDate, Integer> tasksDoneByDay = new HashMap<>();
         pointLogRepository.findByUserIdAndCreatedAtBetween(userId,
                         startDate.atStartOfDay(), today.plusDays(1).atStartOfDay()).stream()
-                .filter(p -> p.getReason().startsWith("完成任务"))
+                .filter(p -> p.getKind() == PointKind.TASK)
                 .forEach(p -> tasksDoneByDay.merge(p.getCreatedAt().toLocalDate(), 1, Integer::sum));
 
         Map<LocalDate, Integer> focusByDay = new HashMap<>();
@@ -72,8 +73,8 @@ public class StatsService {
                     "focusMinutes", focusMinutes));
         }
 
-        long failures = pointLogRepository.countByUserIdAndDeltaLessThanAndCreatedAtBetween(
-                userId, 0, startDate.atStartOfDay(), today.plusDays(1).atStartOfDay());
+        long failures = pointLogRepository.countByUserIdAndKindAndCreatedAtBetween(
+                userId, PointKind.PUNISH, startDate.atStartOfDay(), today.plusDays(1).atStartOfDay());
 
         return Map.of(
                 "days", series,

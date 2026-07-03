@@ -2,6 +2,7 @@ package com.mike.discipline.service;
 
 import com.mike.discipline.entity.Achievement;
 import com.mike.discipline.entity.FocusSession;
+import com.mike.discipline.entity.PointKind;
 import com.mike.discipline.repository.FocusSessionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,7 +37,8 @@ public class FocusService {
 
         if (durationMinutes >= GamificationService.POMODORO_MIN_MINUTES) {
             gamificationService.reward(userId, GamificationService.POMODORO_XP,
-                    GamificationService.POMODORO_POINTS, "完成番茄钟 " + durationMinutes + " 分钟");
+                    GamificationService.POMODORO_POINTS,
+                    "完成番茄钟 " + durationMinutes + " 分钟", PointKind.FOCUS);
         }
 
         long total = focusRepository.countByUserId(userId);

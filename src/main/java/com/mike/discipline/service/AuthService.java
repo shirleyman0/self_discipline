@@ -8,6 +8,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.util.Map;
 
 @Service
@@ -32,8 +33,26 @@ public class AuthService {
         user.setUsername(username);
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setNickname(nickname == null || nickname.isBlank() ? username : nickname);
+        user.setInviteCode(generateInviteCode());
         userRepository.save(user);
         return tokenResponse(user);
+    }
+
+    /** 6 位搭档邀请码（去掉易混淆字符） */
+    private String generateInviteCode() {
+        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        var random = new SecureRandom();
+        for (int attempt = 0; attempt < 10; attempt++) {
+            StringBuilder sb = new StringBuilder(6);
+            for (int i = 0; i < 6; i++) {
+                sb.append(chars.charAt(random.nextInt(chars.length())));
+            }
+            String code = sb.toString();
+            if (userRepository.findByInviteCode(code).isEmpty()) {
+                return code;
+            }
+        }
+        throw new IllegalStateException("生成邀请码失败");
     }
 
     public Map<String, Object> login(String username, String password) {

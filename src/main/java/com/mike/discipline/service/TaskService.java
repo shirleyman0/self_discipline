@@ -1,6 +1,7 @@
 package com.mike.discipline.service;
 
 import com.mike.discipline.entity.Achievement;
+import com.mike.discipline.entity.PointKind;
 import com.mike.discipline.entity.Task;
 import com.mike.discipline.entity.TaskStatus;
 import com.mike.discipline.entity.TaskType;
@@ -90,7 +91,7 @@ public class TaskService {
         taskRepository.save(task);
 
         gamificationService.reward(userId, task.getPoints(), task.getPoints(),
-                "完成任务：" + task.getTitle());
+                "完成任务：" + task.getTitle(), PointKind.TASK);
 
         long doneCount = taskRepository.countByUserIdAndStatus(userId, TaskStatus.DONE);
         if (doneCount >= 10) {

@@ -7,13 +7,13 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
-/** 积分流水：正数=奖励，负数=惩罚 */
+/** 奖励商店：自定义奖励，用积分兑换 */
 @Entity
-@Table(name = "point_log")
+@Table(name = "reward_item")
 @Getter
 @Setter
 @NoArgsConstructor
-public class PointLog {
+public class RewardItem {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -22,15 +22,14 @@ public class PointLog {
     @Column(nullable = false)
     private Long userId;
 
+    @Column(nullable = false, length = 100)
+    private String name;
+
+    @Column(length = 10)
+    private String icon;
+
     @Column(nullable = false)
-    private long delta;
-
-    @Enumerated(EnumType.STRING)
-    @Column(length = 20)
-    private PointKind kind;
-
-    @Column(nullable = false, length = 200)
-    private String reason;
+    private int cost;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();

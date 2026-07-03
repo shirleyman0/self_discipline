@@ -3,65 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>身份认证 - 自律星球</title>
+    <title>自律星球 · 用自律养大你的星球</title>
     <link rel="stylesheet" href="/style.css">
     <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
 </head>
 <body class="auth-body">
-<div id="app" v-cloak style="display:flex;flex-direction:column;align-items:center">
-    <div class="boot-lines">{{ bootText }}</div>
-
-    <div class="auth-card">
-        <h1 class="auth-title">自律星球</h1>
-        <p class="auth-sub">SELF-DISCIPLINE SYSTEM — AUTHENTICATION</p>
-
-        <div class="auth-tabs">
-            <button style="flex:1" :class="{'active-preset': mode==='login'}" @click="mode='login'">登入</button>
-            <button style="flex:1" :class="{'active-preset': mode==='register'}" @click="mode='register'">注册单元</button>
+<div id="stars"></div>
+<div id="app" v-cloak>
+    <div class="auth-wrap">
+        <div class="pitch">
+            <h1>自律星球</h1>
+            <p class="slogan">
+                你的每一次打卡、每一个任务、每一段专注，<br>
+                都会变成能量，把一粒星尘养成一颗恒星。
+            </p>
+            <div class="steps">
+                <div class="pstep">
+                    <div class="ico">✅</div>
+                    <div>
+                        <div class="t">打卡 · 任务 · 专注 = 能量</div>
+                        <div class="d">习惯打卡 +10，完成任务拿赏金，番茄钟专注 +5</div>
+                    </div>
+                </div>
+                <div class="pstep">
+                    <div class="ico">🪐</div>
+                    <div>
+                        <div class="t">能量养星球，一路进化</div>
+                        <div class="d">星尘 → 陨石 → 行星 → 恒星，偷懒会被陨石砸、扣积分</div>
+                    </div>
+                </div>
+                <div class="pstep">
+                    <div class="ico">🛍️</div>
+                    <div>
+                        <div class="t">积分兑换现实奖励</div>
+                        <div class="d">奶茶、剧集、游戏时间——自己定价，攒够就痛快花</div>
+                    </div>
+                </div>
+                <div class="pstep">
+                    <div class="ico">👥</div>
+                    <div>
+                        <div class="t">和搭档互相监督</div>
+                        <div class="d">邀请码结伴，看得到对方的进度，每周积分 PK 争夺 👑</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <form @submit.prevent="submit">
-            <input v-model.trim="form.username" placeholder="识别代号（用户名，至少 3 位）" required>
-            <input v-model="form.password" type="password" placeholder="认证密钥（密码，至少 6 位）" required>
-            <input v-if="mode==='register'" v-model.trim="form.nickname" placeholder="单元名称（昵称，可选）">
-            <p class="auth-error" v-if="error">{{ error }}</p>
-            <button class="btn-primary" type="submit" :disabled="loading">
-                {{ loading ? '认证中…' : (mode === 'login' ? '接入系统' : '注册并接入') }}
-            </button>
-        </form>
+        <div class="auth-card">
+            <div class="auth-title">🚀 登陆你的星球</div>
+            <div class="auth-tabs">
+                <button :class="{'active-preset': mode==='login'}" @click="mode='login'">登录</button>
+                <button :class="{'active-preset': mode==='register'}" @click="mode='register'">注册</button>
+            </div>
+            <form @submit.prevent="submit">
+                <input v-model.trim="form.username" placeholder="用户名（至少 3 位）" required>
+                <input v-model="form.password" type="password" placeholder="密码（至少 6 位）" required>
+                <input v-if="mode==='register'" v-model.trim="form.nickname" placeholder="昵称（可选，搭档会看到）">
+                <p class="auth-error" v-if="error">⚠ {{ error }}</p>
+                <button class="btn-primary" type="submit" :disabled="loading">
+                    {{ loading ? '发射中…' : (mode === 'login' ? '进入星球' : '创建我的星球') }}
+                </button>
+            </form>
+        </div>
     </div>
 </div>
 
 <script>
+// 星空
+(function () {
+    const wrap = document.getElementById('stars');
+    for (let i = 0; i < 90; i++) {
+        const s = document.createElement('span');
+        s.className = 'star';
+        const size = Math.random() < 0.85 ? 1 : 2;
+        s.style.width = s.style.height = size + 'px';
+        s.style.left = Math.random() * 100 + '%';
+        s.style.top = Math.random() * 100 + '%';
+        s.style.animationDelay = (Math.random() * 3).toFixed(2) + 's';
+        s.style.animationDuration = (2 + Math.random() * 3).toFixed(2) + 's';
+        if (Math.random() < 0.12) s.style.background = '#ffd166';
+        wrap.appendChild(s);
+    }
+})();
+
 const { createApp } = Vue;
-const BOOT_LINES = [
-    'LOADING - SELF DISCIPLINE SYSTEM',
-    'MEMORY CHECK .......... OK',
-    'HABIT PROTOCOL ........ OK',
-    'QUEST MODULE .......... OK',
-    'ALL SYSTEMS GREEN'
-];
 createApp({
     data() {
         return {
             mode: 'login',
             form: { username: '', password: '', nickname: '' },
             error: '',
-            loading: false,
-            bootText: ''
+            loading: false
         };
-    },
-    mounted() {
-        // 开机自检逐行打印
-        let line = 0, chars = 0;
-        const timer = setInterval(() => {
-            if (line >= BOOT_LINES.length) { clearInterval(timer); return; }
-            chars += 3;
-            const done = BOOT_LINES.slice(0, line).join('\n');
-            const cur = BOOT_LINES[line].slice(0, chars);
-            this.bootText = done + (done ? '\n' : '') + cur;
-            if (chars >= BOOT_LINES[line].length) { line++; chars = 0; }
-        }, 24);
     },
     methods: {
         async submit() {
@@ -75,14 +108,14 @@ createApp({
                 });
                 const data = await res.json();
                 if (!res.ok) {
-                    this.error = data.message || '认证失败';
+                    this.error = data.message || '操作失败';
                     return;
                 }
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('user', JSON.stringify(data.user));
                 location.href = '/index.html';
             } catch (e) {
-                this.error = '通讯中断，请确认系统已启动';
+                this.error = '网络错误，请确认服务已启动';
             } finally {
                 this.loading = false;
             }

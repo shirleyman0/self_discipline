@@ -1,6 +1,7 @@
 package com.mike.discipline.service;
 
 import com.mike.discipline.entity.Achievement;
+import com.mike.discipline.entity.PointKind;
 import com.mike.discipline.entity.PointLog;
 import com.mike.discipline.entity.User;
 import com.mike.discipline.entity.UserAchievement;
@@ -12,9 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 游戏化核心：XP / 积分 / 等级 / 成就。
- * 奖励规则：打卡 +10 XP +10 分；完成任务 +任务分值；番茄钟(>=25min) +5；解锁成就 +50 分。
- * 惩罚规则：每日结算时未完成任务扣除对应分值（见 DailySettlementJob）。
+ * 游戏化核心：XP / 积分 / 等级 / 成就 / 商店兑换。
+ * 奖励：打卡 +10；任务 +任务分值；番茄钟(>=25min) +5；成就 +50；连续 7/30 天 +30/+100。
+ * 惩罚：每日结算扣分（DailySettlementJob）。兑换：商店扣分（需余额充足）。
  */
 @Service
 public class GamificationService {
@@ -53,26 +54,37 @@ public class GamificationService {
 
     /** 奖励：加 XP、加积分并记流水，然后检查等级成就 */
     @Transactional
-    public void reward(Long userId, long xp, long points, String reason) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> ApiException.notFound("用户不存在"));
+    public void reward(Long userId, long xp, long points, String reason, PointKind kind) {
+        User user = mustFind(userId);
         user.setXp(user.getXp() + xp);
         user.setPoints(user.getPoints() + points);
         userRepository.save(user);
         if (points != 0) {
-            log(userId, points, reason);
+            log(userId, points, reason, kind);
         }
         checkLevelAchievements(userId, user.getXp());
     }
 
-    /** 惩罚：只扣积分，不动 XP */
+    /** 惩罚：只扣积分，不动 XP（记为失败流水） */
     @Transactional
     public void punish(Long userId, long points, String reason) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> ApiException.notFound("用户不存在"));
+        User user = mustFind(userId);
         user.setPoints(user.getPoints() - points);
         userRepository.save(user);
-        log(userId, -points, reason);
+        log(userId, -points, reason, PointKind.PUNISH);
+    }
+
+    /** 商店兑换：余额不足则拒绝 */
+    @Transactional
+    public long redeem(Long userId, long cost, String reason) {
+        User user = mustFind(userId);
+        if (user.getPoints() < cost) {
+            throw ApiException.badRequest("积分不足，还差 " + (cost - user.getPoints()) + " P");
+        }
+        user.setPoints(user.getPoints() - cost);
+        userRepository.save(user);
+        log(userId, -cost, reason, PointKind.REDEEM);
+        return user.getPoints();
     }
 
     /** 解锁成就（幂等）：已解锁则忽略，新解锁奖励 50 分 */
@@ -85,7 +97,8 @@ public class GamificationService {
         ua.setUserId(userId);
         ua.setAchievementCode(achievement.name());
         userAchievementRepository.save(ua);
-        reward(userId, ACHIEVEMENT_BONUS, ACHIEVEMENT_BONUS, "解锁成就：" + achievement.getTitle());
+        reward(userId, ACHIEVEMENT_BONUS, ACHIEVEMENT_BONUS,
+                "解锁成就：" + achievement.getTitle(), PointKind.ACHIEVEMENT);
     }
 
     private void checkLevelAchievements(Long userId, long xp) {
@@ -107,18 +120,24 @@ public class GamificationService {
         ua.setUserId(userId);
         ua.setAchievementCode(achievement.name());
         userAchievementRepository.save(ua);
-        log(userId, ACHIEVEMENT_BONUS, "解锁成就：" + achievement.getTitle());
+        log(userId, ACHIEVEMENT_BONUS, "解锁成就：" + achievement.getTitle(), PointKind.ACHIEVEMENT);
         userRepository.findById(userId).ifPresent(u -> {
             u.setPoints(u.getPoints() + ACHIEVEMENT_BONUS);
             userRepository.save(u);
         });
     }
 
-    private void log(Long userId, long delta, String reason) {
+    private User mustFind(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> ApiException.notFound("用户不存在"));
+    }
+
+    private void log(Long userId, long delta, String reason, PointKind kind) {
         PointLog entry = new PointLog();
         entry.setUserId(userId);
         entry.setDelta(delta);
         entry.setReason(reason);
+        entry.setKind(kind);
         pointLogRepository.save(entry);
     }
 }
