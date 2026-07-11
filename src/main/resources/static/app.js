@@ -127,6 +127,27 @@ const app = createApp({
             visitMessage: '',
             giftPick: '',
             tierPreview: null,
+            // 地表世界
+            surfaceMode: false,
+            landing: false,
+            surfaceTransitionSeq: 0,
+            placing: null,
+            placingBusy: false,
+            worldReady: false,
+            worldBuilderOpen: false,
+            avatarOpen: false,
+            avatarForm: {
+                style: 'EXPLORER', color: '#57e6d5',
+                skinColor: '#E0AD82', hairColor: '#4C3328'
+            },
+            avatarStyles: [
+                { code: 'EXPLORER', name: '星球探险家', mark: 'E' },
+                { code: 'ARCHITECT', name: '世界建筑师', mark: 'A' },
+                { code: 'RANGER', name: '荒野守护者', mark: 'R' },
+                { code: 'ASTRONAUT', name: '深空宇航员', mark: 'S' }
+            ],
+            gestureRunning: false,
+            gestureStatus: '手势控制未开启',
             // 基础数据
             profile: null,
             habits: [],
@@ -215,52 +236,10 @@ const app = createApp({
             const p = this.profile.levelProgress;
             return p.needed === 0 ? 100 : Math.min(100, Math.round(p.current * 100 / p.needed));
         },
-        /** 场景中的建筑：固定功能建筑 + 分类成长建筑 + 开垦位 */
-        sceneBuildings() {
-            if (!this.scenePlanet) return [];
-            const list = [];
-            const open = key => () => this.visiting
-                ? this.toast('这是 TA 的星球，看看就好 🙈')
-                : this.openPanel(key);
-
-            list.push({ key: 'tasks', emoji: '🏛️', name: '指挥中心', sub: '任务清单', act: open('tasks') });
-            list.push({ key: 'focus', emoji: '🚀', name: '发射台', sub: '专注舱', act: open('focus') });
-
-            for (const b of this.scenePlanet.buildings) {
-                const conf = CAT_BUILDINGS[b.category];
-                if (!conf) continue;
-                list.push({
-                    key: 'cat-' + b.category,
-                    emoji: conf.emojis[b.level],
-                    name: conf.names[b.level],
-                    sub: `${b.title} · 已打卡 ${b.checkins} 次`,
-                    act: open('habits')
-                });
-            }
-            if (!this.visiting && this.scenePlanet.buildings.length < 5) {
-                list.push({
-                    key: 'ghost', ghost: true, emoji: '✨', name: '开垦新地',
-                    sub: '创建新分类的习惯', act: () => this.openPanel('habits')
-                });
-            }
-
-            list.push({ key: 'shop', emoji: '🏪', name: '星际商店', sub: '奖励兑换', act: open('shop') });
-            list.push({ key: 'stats', emoji: '🔭', name: '天文台', sub: '数据与复盘', act: open('stats') });
-            list.push({
-                key: 'port', emoji: '🛸', name: '星际港口',
-                sub: this.visiting ? '返航' : (this.partner ? '访问搭档星球' : '寻找搭档'),
-                act: () => {
-                    if (this.visiting) return this.goHome();
-                    if (this.partner) return this.visitPartner();
-                    this.openPanel('partner');
-                }
-            });
-
-            const n = list.length;
-            list.forEach((b, i) => {
-                b.angle = Math.round(-90 + i * (360 / n));
-            });
-            return list;
+        /** 轨道装饰：卫星 / 小月亮 */
+        orbitDecos() {
+            if (!this.scenePlanet || !this.scenePlanet.decorations) return [];
+            return this.scenePlanet.decorations.filter(d => d.orbit);
         },
         tierLadder() {
             const level = this.profile ? this.profile.level : 1;
@@ -378,18 +357,307 @@ const app = createApp({
                 this._p3d = Planet3D.mount(el, {
                     size: 470,
                     tier: this.sceneTier,
-                    onClick: () => {
-                        if (!this.visiting) this.openPanel('planet');
-                    }
+                    onClick: () => this.landOnPlanet()
                 });
             } catch (e) {
                 console.error('3D 星球初始化失败', e);
             }
         },
 
+        /** 初始化真正的 3D 方块世界。世界数据来自后端，因此刷新后建筑仍然存在。 */
+        async initWorld3D() {
+            if (!this.surfaceMode || this._world) return;
+            const transitionSeq = this.surfaceTransitionSeq;
+            // world3d.js 是 ES module，首次降落时最多等待模块初始化 3 秒。
+            for (let i = 0; i < 30 && !window.World3D; i++) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            // 等待模块时用户可能已经升空或返航，不能再往旧 DOM 上挂载世界。
+            if (!this.surfaceMode || transitionSeq !== this.surfaceTransitionSeq || this._world) return;
+            if (!window.World3D) {
+                this.toast('3D 世界引擎加载失败，请刷新页面重试', true);
+                return;
+            }
+            const el = this.$refs.worldMount;
+            if (!el || !el.isConnected) return;
+            try {
+                const planet = this.scenePlanet || {};
+                const world = window.World3D.mount(el, {
+                    seed: this.worldSeed(planet.nickname || planet.planetName || 'planet'),
+                    health: planet.health ? planet.health.state : 'FLOURISHING',
+                    objects: planet.worldObjects || [],
+                    avatar: planet.avatar || this.avatarForm,
+                    readonly: this.visiting,
+                    onGroundClick: point => this.placeWorldAt(point),
+                    onObjectClick: object => this.worldObjectClick(object),
+                    onReady: () => { this.worldReady = true; }
+                });
+                // WebGL 挂载期间也可能发生返航，旧世界必须当场销毁。
+                if (!this.surfaceMode || transitionSeq !== this.surfaceTransitionSeq || !el.isConnected) {
+                    world.destroy();
+                    return;
+                }
+                this._world = world;
+                if (this._world.attachJoystick && this.$refs.worldJoystick) {
+                    this._world.attachJoystick(this.$refs.worldJoystick);
+                }
+                if (this.placing && this._world.setBuildMode) {
+                    this._world.setBuildMode(this.placing.code);
+                }
+            } catch (e) {
+                console.error('3D 世界初始化失败', e);
+                this.toast('3D 世界初始化失败：' + e.message, true);
+            }
+        },
+        worldSeed(text) {
+            let hash = 2166136261;
+            for (const ch of String(text)) {
+                hash ^= ch.charCodeAt(0);
+                hash = Math.imul(hash, 16777619);
+            }
+            return Math.abs(hash || 7);
+        },
+        destroyWorld3D() {
+            if (this._world) this._world.destroy();
+            this._world = null;
+            this.worldReady = false;
+        },
+        async rebuildWorld3D() {
+            this.destroyWorld3D();
+            await this.$nextTick();
+            await this.initWorld3D();
+        },
+
+        // ---- 降落 / 升空 ----
+        landOnPlanet() {
+            if (this.landing || this.warping || this.surfaceMode) return;
+            blip(700, .12);
+            this.landing = true;
+            const transitionSeq = ++this.surfaceTransitionSeq;
+            setTimeout(() => {
+                if (transitionSeq !== this.surfaceTransitionSeq) return;
+                this.surfaceMode = true;
+                this.$nextTick(() => {
+                    if (transitionSeq === this.surfaceTransitionSeq) this.initWorld3D();
+                });
+                setTimeout(() => {
+                    if (transitionSeq === this.surfaceTransitionSeq) this.landing = false;
+                }, 700);
+            }, 850);
+        },
+        liftOff() {
+            if (this.landing) return;
+            if (this.placingBusy) return this.toast('建筑正在保存，请稍候再升空', true);
+            blip(900, .12);
+            this.placing = null;
+            this.worldBuilderOpen = false;
+            this.avatarOpen = false;
+            if (this._world && this._world.setBuildMode) this._world.setBuildMode(null);
+            this.landing = true;
+            const transitionSeq = ++this.surfaceTransitionSeq;
+            setTimeout(() => {
+                if (transitionSeq !== this.surfaceTransitionSeq) return;
+                this.destroyWorld3D();
+                this.surfaceMode = false;
+                setTimeout(() => {
+                    if (transitionSeq === this.surfaceTransitionSeq) this.landing = false;
+                }, 700);
+            }, 850);
+        },
+        /** 跨星球旅行前立即销毁当前地表，避免自己/搭档世界串台。 */
+        leaveSurfaceForTravel() {
+            this.surfaceTransitionSeq++;
+            this.placing = null;
+            this.worldBuilderOpen = false;
+            this.avatarOpen = false;
+            if (this._world && this._world.setBuildMode) this._world.setBuildMode(null);
+            this.destroyWorld3D();
+            this.surfaceMode = false;
+            this.landing = false;
+        },
+
+        sceneParallax(e) {
+            if (this.surfaceMode) return;
+            const x = (e.clientX / window.innerWidth - .5) * 2;
+            const y = (e.clientY / window.innerHeight - .5) * 2;
+            e.currentTarget.style.setProperty('--mx', x.toFixed(3));
+            e.currentTarget.style.setProperty('--my', y.toFixed(3));
+        },
+
+        // ---- 持久化世界建造 ----
+        async startWorldBuild(item) {
+            if (this.visiting) return this.toast('只能在自己的星球建造', true);
+            if (this.placingBusy) return this.toast('上一座建筑正在保存，请稍候', true);
+            if (this.profile && this.profile.points < item.cost) return this.toast('积分不足，先去完成打卡吧', true);
+            this.placing = item;
+            this.panel = null;
+            this.worldBuilderOpen = false;
+            this.avatarOpen = false;
+            if (!this.surfaceMode) {
+                this.landOnPlanet();
+                this.toast(`正在进入世界，落地后选择位置建造「${item.title}」`);
+            } else {
+                if (this._world && this._world.setBuildMode) this._world.setBuildMode(item.code);
+                this.toast(`蓝图已装载：点击地面建造「${item.title}」`);
+            }
+        },
+        async placeWorldAt(point) {
+            const item = this.placing;
+            if (!item || this.visiting || this.placingBusy) return;
+            const worldAtRequest = this._world;
+            this.placingBusy = true;
+            try {
+                const object = await api('/api/planet/world/objects', {
+                    method: 'POST',
+                    body: JSON.stringify({ kind: item.code, x: point.x, z: point.z })
+                });
+                this.placing = null;
+                if (this._world && this._world.setBuildMode) this._world.setBuildMode(null);
+                await Promise.all([this.loadPlanet(), this.loadProfile()]);
+                if (this.surfaceMode && this._world === worldAtRequest && this._world && this._world.upsertObject) {
+                    this._world.upsertObject(object);
+                } else if (this.surfaceMode) {
+                    await this.rebuildWorld3D();
+                }
+                blip(1760, .12);
+                this.toast(`「${item.title}」建造完成，已永久保存到你的星球`);
+            } catch (e) {
+                this.toast(e.message, true);
+            } finally {
+                this.placingBusy = false;
+            }
+        },
+        async worldObjectClick(object) {
+            if (!object || this.placing) return;
+            if (this.visiting) return this.toast(`这是 TA 建造的「${object.title || object.kind}」`);
+            if (!confirm(`要拆除「${object.title || object.kind}」吗？拆除后不返还积分。`)) return;
+            try {
+                await api(`/api/planet/world/objects/${object.id}`, { method: 'DELETE' });
+                if (this._world && this._world.removeObject) this._world.removeObject(object.id);
+                await this.loadPlanet();
+                this.toast('建筑已拆除');
+            } catch (e) {
+                this.toast(e.message, true);
+            }
+        },
+        cancelWorldBuild() {
+            if (this.placingBusy) return this.toast('建筑正在保存，暂时不能取消', true);
+            this.placing = null;
+            if (this._world && this._world.setBuildMode) this._world.setBuildMode(null);
+            this.toast('已取消建造');
+        },
+        async saveAvatar() {
+            try {
+                await api('/api/planet/avatar', {
+                    method: 'PUT', body: JSON.stringify(this.avatarForm)
+                });
+                if (this._world && this._world.setAvatar) this._world.setAvatar(this.avatarForm);
+                await this.loadPlanet();
+                this.avatarOpen = false;
+                this.toast('角色形象已保存');
+            } catch (e) {
+                this.toast(e.message, true);
+            }
+        },
+
+        // ---- 可选摄像头手势控制 ----
+        stopGestureControls(status = '手势控制未开启') {
+            if (window.GestureControls) window.GestureControls.stop();
+            this.gestureRunning = false;
+            this.gestureStatus = status;
+        },
+        async toggleGesture() {
+            if (!window.GestureControls) return this.toast('当前浏览器不支持手势模块', true);
+            if (this.gestureRunning) {
+                this.stopGestureControls();
+                return;
+            }
+            try {
+                const started = await window.GestureControls.start({
+                    video: this.$refs.gestureVideo,
+                    onPinchRelease: () => this.surfaceMode ? this.liftOff() : this.landOnPlanet(),
+                    onSwipe: dx => {
+                        if (this.surfaceMode && this._world && this._world.rotateBy) this._world.rotateBy(dx);
+                        else if (this._p3d && this._p3d.rotateBy) this._p3d.rotateBy(dx);
+                    },
+                    onStatus: status => {
+                        this.gestureStatus = typeof status === 'string' ? status : status.message;
+                        if (status && ['error', 'stopped'].includes(status.state)) this.gestureRunning = false;
+                    }
+                });
+                this.gestureRunning = Boolean(started && window.GestureControls.isRunning());
+            } catch (e) {
+                this.gestureRunning = false;
+                this.toast(e.message || '手势控制启动失败', true);
+            }
+        },
+
+        // ---- 旧版轨道装饰 ----
+        async startPlacing(item) {
+            if (this.profile && this.profile.points < item.cost) {
+                return this.toast('积分不足', true);
+            }
+            if (item.orbit) {
+                if (!confirm(`花 ${item.cost}P 把 ${item.emoji} ${item.title} 发射入轨？`)) return;
+                try {
+                    await api('/api/planet/decorations', {
+                        method: 'POST',
+                        body: JSON.stringify({ code: item.code, posX: 0 })
+                    });
+                    await Promise.all([this.loadPlanet(), this.loadProfile()]);
+                    this.toast(`🛰️ ${item.title} 已进入环绕轨道！`);
+                } catch (e) {
+                    this.toast(e.message, true);
+                }
+                return;
+            }
+            this.placing = item;
+            this.panel = null;
+            if (!this.surfaceMode) {
+                this.landOnPlanet();
+                this.toast(`正在降落… 落地后点击地面放置 ${item.emoji}`);
+            } else {
+                this.toast(`点击地面放置 ${item.emoji}`);
+            }
+        },
+        async decoClick(d) {
+            if (this.placing) return;
+            if (this.visiting) {
+                return this.toast(`这是 TA 摆的 ${d.emoji}，看看就好`);
+            }
+            if (!confirm(`拆除 ${d.emoji} ${d.title}？（不退积分）`)) return;
+            await api(`/api/planet/decorations/${d.id}`, { method: 'DELETE' });
+            await this.loadPlanet();
+            this.toast('已拆除');
+        },
+        mailboxClick() {
+            blip();
+            if (this.visiting) {
+                this.toast('在下方输入框给 TA 留言 📮');
+            } else {
+                this.openPanel('planet');
+            }
+        },
+
         // ---- 面板 ----
+        toggleWorldBuilder() {
+            this.worldBuilderOpen = !this.worldBuilderOpen;
+            this.avatarOpen = false;
+            if (this.worldBuilderOpen) {
+                this.panel = null;
+            }
+        },
+        toggleAvatarStudio() {
+            this.avatarOpen = !this.avatarOpen;
+            this.worldBuilderOpen = false;
+            if (this.avatarOpen) {
+                this.panel = null;
+            }
+        },
         openPanel(key) {
             blip();
+            this.worldBuilderOpen = false;
+            this.avatarOpen = false;
             this.panel = key;
             if (key === 'stats') {
                 this.loadStats(this.statsRange);
@@ -408,6 +676,7 @@ const app = createApp({
         // ---- 星球场景 ----
         async loadPlanet() {
             this.myPlanet = await api('/api/planet');
+            if (this.myPlanet.avatar) this.avatarForm = { ...this.myPlanet.avatar };
         },
         async renamePlanet() {
             const name = prompt('给你的星球起个名字（30 字以内）：',
@@ -422,15 +691,21 @@ const app = createApp({
             }
         },
         async visitPartner() {
+            if (this.warping) return;
+            if (this.placingBusy) return this.toast('建筑正在保存，请稍候再出发', true);
+            // 用户一旦发起旅行就先释放摄像头，即使后续请求失败也不会后台识别。
+            this.stopGestureControls('访问搭档时已关闭手势控制');
             try {
                 blip(880, 0.15);
+                if (this.surfaceMode || this.landing) this.leaveSurfaceForTravel();
                 this.panel = null;
                 this.warping = true;
                 const data = await api('/api/planet/partner');
-                setTimeout(() => {
+                this._travelTimer = setTimeout(() => {
                     this.partnerPlanetData = data;
                     this.visiting = true;
                     this.warping = false;
+                    this._travelTimer = null;
                     this.toast(`🛬 已降落在「${data.planetName}」`);
                 }, 1000);
             } catch (e) {
@@ -439,14 +714,18 @@ const app = createApp({
             }
         },
         goHome() {
+            if (this.warping) return;
             blip(880, 0.15);
+            this.stopGestureControls();
+            if (this.surfaceMode || this.landing) this.leaveSurfaceForTravel();
             this.warping = true;
-            setTimeout(() => {
+            this._travelTimer = setTimeout(() => {
                 this.visiting = false;
                 this.partnerPlanetData = null;
                 this.visitMessage = '';
                 this.giftPick = '';
                 this.warping = false;
+                this._travelTimer = null;
                 this.toast('🏠 已返航回自己的星球');
             }, 1000);
         },
@@ -793,10 +1072,33 @@ const app = createApp({
             console.error(e);
         }
         this.$nextTick(() => this.initPlanet3D());
-        // ESC 关闭面板
-        window.addEventListener('keydown', e => {
-            if (e.key === 'Escape' && this.panel) this.closePanel();
-        });
+        // 开发辅助：?surface=1 自动降落
+        if (location.search.includes('surface=1')) {
+            this._autoSurfaceTimer = setTimeout(() => {
+                this._autoSurfaceTimer = null;
+                this.landOnPlanet();
+            }, 600);
+        }
+        // ESC：取消放置 > 关面板 > 升空
+        this._onGlobalKeydown = e => {
+            if (e.key !== 'Escape') return;
+            if (this.placing) { this.cancelWorldBuild(); return; }
+            if (this.panel) { this.closePanel(); return; }
+            if (this.surfaceMode) this.liftOff();
+        };
+        window.addEventListener('keydown', this._onGlobalKeydown);
+    },
+
+    beforeUnmount() {
+        this.surfaceTransitionSeq++;
+        clearTimeout(this._autoSurfaceTimer);
+        clearTimeout(this._travelTimer);
+        clearInterval(this.timerHandle);
+        if (this._onGlobalKeydown) window.removeEventListener('keydown', this._onGlobalKeydown);
+        if (window.GestureControls) window.GestureControls.stop();
+        this.destroyWorld3D();
+        if (this._p3d && this._p3d.destroy) this._p3d.destroy();
+        this._p3d = null;
     }
 });
 app.mount('#app');

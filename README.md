@@ -1,6 +1,6 @@
 # 自律星球（Self-Discipline Tracker）
 
-监督每天学习和生活的自律网站：习惯打卡、任务清单、番茄钟、数据统计复盘，配合游戏化激励（XP / 等级 / 成就）与惩罚机制（未完成任务扣积分、失败记录、复盘）。
+监督每天学习和生活的沉浸式自律网站：习惯打卡、任务清单、番茄钟、数据统计复盘，配合游戏化激励（XP / 等级 / 成就）与惩罚机制（未完成任务扣积分、失败记录、复盘）。首页是一颗悬浮在深空中的实时 3D 星球，点击即可降落到 Minecraft 风格的可探索世界。
 
 ## 技术栈
 
@@ -8,19 +8,34 @@
 - Spring Data JPA + MySQL
 - Spring Security + JWT（多用户注册登录）
 - Vue 3（CDN）+ ECharts 前端，无需 Node 构建
+- Three.js 程序化 3D 星球与方块世界
+- MediaPipe Hands 可选摄像头手势控制（未开启时不会申请摄像头权限）
 - Spring `@Scheduled` 每日结算
 
 ## 本地运行
 
-前置：JDK 17+，本地 MySQL 已启动（默认 root/123456，首次启动自动建 `discipline` 库）。
+前置：**JDK 17**，本地 MySQL 已启动（账号密码以 `application.yml` 或环境变量为准，首次启动自动建 `discipline` 库）。
 
 ```bash
+# macOS 如果同时安装了多个 JDK，先明确切到 17
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export PATH="$JAVA_HOME/bin:$PATH"
+
 mvn spring-boot:run
 # 或
 mvn package && java -jar target/self-discipline-0.0.1-SNAPSHOT.jar
 ```
 
 打开 http://localhost:8080 （首次先注册账号）。
+
+## 3D 星球玩法
+
+- 首页：拖动旋转中央星球，点击星球降落；深空星云、流星、极光会随生态状态变化。
+- 探索：电脑使用 `WASD / 方向键` 移动、`Shift` 奔跑、拖动环视、滚轮缩放；触屏使用虚拟摇杆、拖动与双指缩放。
+- 创造：在地表打开「创造」，选择森林、湖泊、木屋、农场、图书馆、城堡等蓝图，再点击地面放置。建筑会永久保存。
+- 积分：打卡和完成任务获得积分；创建森林、湖泊和建筑会由服务端校验并扣除积分，余额不足无法建造。
+- 角色：可选择探险家、建筑师、游侠或宇航员，并自定义服装、肤色和发色；角色可以在世界中自由行走。
+- 手势（可选）：点击「开启手势」后，捏合再张开可进入/退出星球，左右挥动可旋转视角。普通鼠标、键盘和触屏操作始终可用。
 
 数据库连接不同时用环境变量覆盖：
 
@@ -59,4 +74,7 @@ JWT_SECRET=换成随机长字符串 DB_URL=jdbc:mysql://服务器:3306/disciplin
 - `GET /api/stats/summary?range=week|month`
 - `GET /api/profile`（XP、等级、成就、失败记录、积分流水）
 - `GET/POST /api/reviews`（每日复盘）
+- `GET /api/planet`（3D 世界、角色、建造目录）
+- `POST/DELETE /api/planet/world/objects`（建造/拆除世界物件）
+- `PUT /api/planet/avatar`（保存角色形象）
 - `POST /api/dev/settle`（手动触发每日结算，用于测试）

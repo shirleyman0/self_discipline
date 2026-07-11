@@ -55,7 +55,7 @@ public class GamificationService {
     /** 奖励：加 XP、加积分并记流水，然后检查等级成就 */
     @Transactional
     public void reward(Long userId, long xp, long points, String reason, PointKind kind) {
-        User user = mustFind(userId);
+        User user = mustFindForUpdate(userId);
         user.setXp(user.getXp() + xp);
         user.setPoints(user.getPoints() + points);
         userRepository.save(user);
@@ -68,7 +68,7 @@ public class GamificationService {
     /** 惩罚：只扣积分，不动 XP（记为失败流水） */
     @Transactional
     public void punish(Long userId, long points, String reason) {
-        User user = mustFind(userId);
+        User user = mustFindForUpdate(userId);
         user.setPoints(user.getPoints() - points);
         userRepository.save(user);
         log(userId, -points, reason, PointKind.PUNISH);
@@ -77,7 +77,11 @@ public class GamificationService {
     /** 商店兑换：余额不足则拒绝 */
     @Transactional
     public long redeem(Long userId, long cost, String reason) {
-        User user = mustFind(userId);
+        if (cost <= 0) {
+            throw ApiException.badRequest("兑换积分必须大于 0");
+        }
+        // 行锁保证同一用户并发建造/兑换时不会超额消费。
+        User user = mustFindForUpdate(userId);
         if (user.getPoints() < cost) {
             throw ApiException.badRequest("积分不足，还差 " + (cost - user.getPoints()) + " P");
         }
@@ -90,6 +94,8 @@ public class GamificationService {
     /** 解锁成就（幂等）：已解锁则忽略，新解锁奖励 50 分 */
     @Transactional
     public void unlock(Long userId, Achievement achievement) {
+        // 与 reward/redeem 保持相同的加锁顺序，避免成就奖励与兑换互相覆盖。
+        mustFindForUpdate(userId);
         if (userAchievementRepository.existsByUserIdAndAchievementCode(userId, achievement.name())) {
             return;
         }
@@ -121,14 +127,15 @@ public class GamificationService {
         ua.setAchievementCode(achievement.name());
         userAchievementRepository.save(ua);
         log(userId, ACHIEVEMENT_BONUS, "解锁成就：" + achievement.getTitle(), PointKind.ACHIEVEMENT);
-        userRepository.findById(userId).ifPresent(u -> {
-            u.setPoints(u.getPoints() + ACHIEVEMENT_BONUS);
-            userRepository.save(u);
-        });
+        // 等级成就由 reward() 触发；这里复用同一事务中的用户行锁。
+        User user = mustFindForUpdate(userId);
+        user.setPoints(user.getPoints() + ACHIEVEMENT_BONUS);
+        userRepository.save(user);
     }
 
-    private User mustFind(Long userId) {
-        return userRepository.findById(userId)
+    /** 所有积分/XP 写入都锁定同一用户行，避免奖励、惩罚和兑换并发覆盖。 */
+    private User mustFindForUpdate(Long userId) {
+        return userRepository.findForUpdateById(userId)
                 .orElseThrow(() -> ApiException.notFound("用户不存在"));
     }
 

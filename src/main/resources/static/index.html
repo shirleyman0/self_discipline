@@ -8,6 +8,14 @@
     <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
 </head>
 <body>
 <div id="stars"></div>
@@ -16,11 +24,26 @@
         <div class="toast" :class="{alert: t.alert}" v-for="t in toasts" :key="t.id">{{ t.msg }}</div>
     </div>
 
-    <!-- 火箭转场 -->
-    <div class="warp-rocket" v-if="warping">🚀</div>
+    <!-- 跨星球跃迁转场 -->
+    <div class="warp-transition" v-if="warping" aria-hidden="true">
+        <i v-for="n in 18" :key="n" :style="{'--n': n}"></i>
+        <span>INTERSTELLAR TRANSFER</span>
+    </div>
 
     <!-- ==================== 星球场景 ==================== -->
-    <div class="scene" :class="[skyClass, 'health-' + sceneHealth]" v-if="scenePlanet">
+    <div class="scene" :class="[skyClass, 'health-' + sceneHealth]" v-if="scenePlanet"
+         @mousemove="sceneParallax">
+        <!-- 深空星云（视差层） -->
+        <template v-if="!surfaceMode">
+            <div class="galaxy-core"></div>
+            <div class="cosmic-dust dust-a"></div>
+            <div class="cosmic-dust dust-b"></div>
+            <div class="nebula n1"></div>
+            <div class="nebula n2"></div>
+            <div class="nebula n3"></div>
+            <div class="shoot s1"></div>
+            <div class="shoot s2"></div>
+        </template>
         <!-- 天气 -->
         <template v-if="sceneHealth === 'FLOURISHING'">
             <div class="aurora"></div>
@@ -39,7 +62,7 @@
         </div>
 
         <!-- HUD 左上：星球信息 -->
-        <div class="hud hud-tl">
+        <div class="hud hud-tl" v-show="!surfaceMode">
             <div class="p-name" @click="visiting ? null : renamePlanet()">
                 🪐 {{ scenePlanet.planetName }}
             </div>
@@ -54,39 +77,124 @@
         </div>
 
         <!-- HUD 右上：今日概览（自己的星球才显示） -->
-        <div class="hud hud-tr" v-if="!visiting">
+        <div class="hud hud-tr" v-if="!visiting && !surfaceMode">
             <div class="chip"><b class="cyan">{{ checkedCount }}/{{ habits.length }}</b><br>打卡</div>
             <div class="chip"><b class="gold">{{ doneTodayCount }}/{{ todayTasks.length }}</b><br>任务</div>
             <div class="chip"><b class="purple">{{ focusToday.minutes }}′</b><br>专注</div>
             <div class="chip" style="cursor:pointer" @click="logout">🚪<br>退出</div>
         </div>
 
+        <!-- 可选手势：识别在浏览器本地执行；首次开启需下载手势运行时和模型 -->
+        <div class="gesture-console" v-if="!visiting">
+            <button @click="toggleGesture" :class="{active: gestureRunning}">
+                <i></i>{{ gestureRunning ? '关闭手势' : '开启手势' }}
+            </button>
+            <span>{{ gestureStatus }}</span>
+            <video ref="gestureVideo" muted playsinline></video>
+        </div>
+
         <!-- 失败警告 chip -->
-        <div class="alert-chip" v-if="!visiting && recentFailures.length && failuresRecent"
+        <div class="alert-chip" v-if="!surfaceMode && !visiting && recentFailures.length && failuresRecent"
              @click="openPanel('stats')">
             💥 星球遭到陨石撞击（{{ recentFailures.length }} 条失败记录）— 点击查看
         </div>
 
-        <!-- 星球 + 建筑 -->
-        <div class="planet-stage" :class="{warping: warping}">
+        <!-- ==================== 轨道视角 ==================== -->
+        <div class="planet-stage" :class="{warping: warping, dive: landing}" v-show="!surfaceMode">
             <div class="planet3d-wrap" :class="'health-' + sceneHealth" ref="planetMount"
                  :title="scenePlanet.planetName"></div>
-
-            <div class="building" :class="{ghost: b.ghost}"
-                 v-for="(b, i) in sceneBuildings" :key="b.key"
-                 :style="{'--a': b.angle + 'deg', '--r': '248px', '--d': (i * 0.4) + 's'}"
-                 @click="b.act">
-                <span class="b-emoji">{{ b.emoji }}</span>
-                <span class="b-label">{{ b.name }}</span>
-                <span class="b-sub">{{ b.sub }}</span>
+            <!-- 轨道装饰：卫星 / 小月亮 -->
+            <div class="orbiter" v-for="(o, i) in orbitDecos" :key="'o' + o.id"
+                 :style="{width: (560 + i * 84) + 'px', height: (560 + i * 84) + 'px',
+                          animationDuration: (36 + i * 16) + 's'}">
+                <span :style="{fontSize: o.code === 'MOON' ? '42px' : '26px',
+                               animationDuration: (36 + i * 16) + 's'}"
+                      @click.stop="decoClick(o)">{{ o.emoji }}</span>
             </div>
+            <div class="land-hint">▼ 点击星球 · 降落到地表</div>
+        </div>
+
+        <!-- ==================== 3D 地表世界 ==================== -->
+        <div class="world3d" v-if="surfaceMode" ref="worldMount">
+            <div class="world-hint">
+                <span class="desktop-controls"><b>WASD / 方向键</b> 移动 · <b>Shift</b> 奔跑 · <b>拖动</b> 环视 · <b>滚轮</b> 缩放 · <b>ESC</b> 升空</span>
+                <span class="touch-controls"><b>左侧摇杆</b> 移动 · <b>右侧拖动</b> 环视 · 双指缩放</span>
+            </div>
+            <div class="place-bar" v-if="placing">
+                <span class="place-copy" v-if="placingBusy"><b>建造蓝图</b> · 正在保存…</span>
+                <span class="place-copy" v-else><b>建造蓝图</b> · 点击地面放置 {{ placing.title }}（-{{ placing.cost }}P）· 按 ESC 取消</span>
+                <button class="place-cancel" :disabled="placingBusy" @click="cancelWorldBuild">
+                    {{ placingBusy ? '建造中' : '取消' }}
+                </button>
+            </div>
+            <div class="crosshair" v-if="placing"><i></i><i></i></div>
+            <div class="world-toolbar" v-if="!visiting">
+                <button @click="toggleWorldBuilder" :class="{active: worldBuilderOpen}">
+                    <span>⌑</span><b>创造</b>
+                </button>
+                <button @click="toggleAvatarStudio" :class="{active: avatarOpen}">
+                    <span>◉</span><b>形象</b>
+                </button>
+                <button @click="openPanel('habits')"><span>✓</span><b>打卡</b></button>
+            </div>
+            <div class="mobile-joystick" ref="worldJoystick" aria-label="移动摇杆">
+                <i></i><span>移动</span>
+            </div>
+            <aside class="world-builder" v-if="worldBuilderOpen && !visiting">
+                <header><div><small>CREATIVE INVENTORY</small><h2>世界创造台</h2></div><button @click="worldBuilderOpen=false">×</button></header>
+                <p class="builder-balance">可用建造积分 <b>{{ profile ? profile.points : 0 }} P</b></p>
+                <div class="blueprint-grid" v-if="scenePlanet">
+                    <button class="blueprint" v-for="item in scenePlanet.worldCatalog" :key="item.code"
+                            :disabled="profile && profile.points < item.cost"
+                            @click="startWorldBuild(item)">
+                        <span class="block-preview" :class="'bp-' + item.code.toLowerCase()"></span>
+                        <strong>{{ item.title }}</strong><small>{{ item.description }}</small>
+                        <em>{{ item.cost }} P</em>
+                    </button>
+                </div>
+            </aside>
+            <aside class="avatar-studio" v-if="avatarOpen && !visiting">
+                <header><div><small>AVATAR LAB</small><h2>角色形象</h2></div><button @click="avatarOpen=false">×</button></header>
+                <p>选择你在星球世界中的方块化身份，并调整服装、肤色与发色。</p>
+                <div class="avatar-types">
+                    <button v-for="a in avatarStyles" :key="a.code" :class="{active: avatarForm.style===a.code}"
+                            @click="avatarForm.style=a.code"><span>{{ a.mark }}</span>{{ a.name }}</button>
+                </div>
+                <div class="avatar-colors">
+                    <label>服装主题 <input type="color" v-model="avatarForm.color"></label>
+                    <label>人物肤色 <input type="color" v-model="avatarForm.skinColor"></label>
+                    <label>头发颜色 <input type="color" v-model="avatarForm.hairColor"></label>
+                </div>
+                <button class="avatar-save" @click="saveAvatar">保存并应用</button>
+            </aside>
+            <div class="visit-msg-bar" v-if="visiting && !placing">
+                <span class="gift-pick">
+                    <span v-for="g in ['🎁','🌸','☕','⭐','🍀']" :key="g"
+                          :class="{sel: giftPick === g}" @click="giftPick = giftPick === g ? '' : g">{{ g }}</span>
+                </span>
+                <input type="text" v-model.trim="visitMessage" placeholder="给 TA 的世界留句话…" @keyup.enter="sendPlanetMessage">
+                <button class="btn-sm" @click="sendPlanetMessage">留言</button>
+            </div>
+            <button class="liftoff-btn" :disabled="placingBusy" @click="liftOff">🚀 升空</button>
+        </div>
+
+        <!-- 降落/升空转场 -->
+        <div class="land-overlay" v-if="landing">
+            <div class="lo-cloud c1">☁️</div>
+            <div class="lo-cloud c2">☁️</div>
+            <div class="lo-cloud c3">☁️</div>
         </div>
 
         <!-- 底部格言 -->
-        <div class="quote-line" v-if="!visiting">「 {{ quote }} 」</div>
+        <div class="hero-copy" v-if="!surfaceMode && !visiting">
+            <small>YOUR WORLD · YOUR DISCIPLINE</small>
+            <strong>让坚持，成为一颗真实生长的星球</strong>
+            <span>点击中央星球，进入你亲手创造的世界</span>
+        </div>
+        <div class="quote-line" v-if="!visiting && !surfaceMode">「 {{ quote }} 」</div>
 
         <!-- 访问模式：留言表单 -->
-        <div class="dock" v-if="visiting" style="gap:10px;padding:10px 16px">
+        <div class="dock" v-if="visiting && !surfaceMode" style="gap:10px;padding:10px 16px">
             <span class="gift-pick">
                 <span v-for="g in ['🎁','🌸','☕','⭐','🍀']" :key="g"
                       :class="{sel: giftPick === g}" @click="giftPick = giftPick === g ? '' : g">{{ g }}</span>
@@ -97,7 +205,7 @@
         </div>
 
         <!-- 底部 dock（自己的星球） -->
-        <div class="dock" v-else>
+        <div class="dock" v-else-if="!surfaceMode">
             <button data-tip="星球档案" :class="{on: panel==='planet'}" @click="openPanel('planet')">🪐</button>
             <button data-tip="每日打卡" :class="{on: panel==='habits'}" @click="openPanel('habits')">✅</button>
             <button data-tip="任务清单" :class="{on: panel==='tasks'}" @click="openPanel('tasks')">📋</button>
@@ -310,6 +418,20 @@
                         </p>
                     </div>
 
+                    <div class="card world-store-card">
+                        <h3>◈ 世界创造中心 <span class="muted" style="font-weight:400">打卡赚积分，把空地变成真正的世界</span></h3>
+                        <div class="world-store-grid" v-if="myPlanet">
+                            <article v-for="c in myPlanet.worldCatalog" :key="c.code">
+                                <span class="block-preview" :class="'bp-' + c.code.toLowerCase()"></span>
+                                <div><b>{{ c.title }}</b><small>{{ c.category }} · {{ c.description }}</small></div>
+                                <strong>{{ c.cost }} P</strong>
+                                <button class="btn-sm" @click="startWorldBuild(c)" :disabled="profile && profile.points < c.cost">
+                                    {{ profile && profile.points < c.cost ? '积分不足' : '进入世界建造' }}
+                                </button>
+                            </article>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <h3>➕ 上架新奖励</h3>
                         <div class="form-row">
@@ -492,6 +614,8 @@
     </transition>
 </div>
 <script src="/planet3d.js"></script>
+<script type="module" src="/world3d.js"></script>
+<script src="/gesture.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

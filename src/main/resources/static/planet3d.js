@@ -307,10 +307,11 @@
         // 拖动旋转 + 点击（位移 < 6px 判定为点击）
         let vx = .0035, dragging = false, lx = 0, downX = 0, downY = 0, moved = 0;
         renderer.domElement.style.cursor = 'grab';
-        renderer.domElement.addEventListener('pointerdown', e => {
+        function onDown(e) {
             dragging = true; lx = downX = e.clientX; downY = e.clientY; moved = 0;
             renderer.domElement.style.cursor = 'grabbing';
-        });
+        }
+        renderer.domElement.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
         function onMove(e) {
@@ -327,9 +328,10 @@
         }
 
         let t = 0;
+        let frameId = 0;
         (function loop() {
             if (destroyed) return;
-            requestAnimationFrame(loop);
+            frameId = requestAnimationFrame(loop);
             t += .016;
             if (planetMesh) planetMesh.rotation.y += vx;
             if (!dragging) vx += (.0035 - vx) * .02;
@@ -341,8 +343,14 @@
 
         return {
             setTier(tier) { build(tier); },
+            /** 手势横滑时给星球一个惯性旋转速度。 */
+            rotateBy(delta) {
+                vx = Math.max(-.045, Math.min(.045, vx + Number(delta || 0) * .08));
+            },
             destroy() {
                 destroyed = true;
+                cancelAnimationFrame(frameId);
+                renderer.domElement.removeEventListener('pointerdown', onDown);
                 window.removeEventListener('pointermove', onMove);
                 window.removeEventListener('pointerup', onUp);
                 clearGroup();

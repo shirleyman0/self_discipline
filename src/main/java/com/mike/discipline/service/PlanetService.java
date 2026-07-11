@@ -1,25 +1,32 @@
 package com.mike.discipline.service;
 
+import com.mike.discipline.entity.DecorationItem;
 import com.mike.discipline.entity.Habit;
 import com.mike.discipline.entity.HabitCategory;
 import com.mike.discipline.entity.HabitCheckin;
+import com.mike.discipline.entity.PlanetDecoration;
 import com.mike.discipline.entity.PlanetMessage;
 import com.mike.discipline.entity.PointKind;
 import com.mike.discipline.entity.PointLog;
 import com.mike.discipline.entity.User;
+import com.mike.discipline.entity.WorldItem;
+import com.mike.discipline.entity.WorldObject;
 import com.mike.discipline.exception.ApiException;
 import com.mike.discipline.repository.FocusSessionRepository;
 import com.mike.discipline.repository.HabitCheckinRepository;
 import com.mike.discipline.repository.HabitRepository;
+import com.mike.discipline.repository.PlanetDecorationRepository;
 import com.mike.discipline.repository.PlanetMessageRepository;
 import com.mike.discipline.repository.PointLogRepository;
 import com.mike.discipline.repository.UserRepository;
+import com.mike.discipline.repository.WorldObjectRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -42,6 +49,18 @@ import java.util.stream.Collectors;
 public class PlanetService {
 
     private static final int[] LEVEL_THRESHOLDS = {1, 10, 30, 80};
+    private static final double WORLD_LIMIT = 190.0;
+    private static final int MAX_WORLD_OBJECTS = 500;
+    private static final Set<String> AVATAR_STYLES = Set.of(
+            "EXPLORER", "ARCHITECT", "RANGER", "ASTRONAUT");
+
+    /** 稳定的 API 输出 DTO，不把 userId 等持久化细节暴露给前端。 */
+    public record WorldObjectView(Long id, String kind, String title, double x, double z) {
+        static WorldObjectView from(WorldObject object) {
+            return new WorldObjectView(object.getId(), object.getKind().name(),
+                    object.getKind().getTitle(), object.getX(), object.getZ());
+        }
+    }
 
     private final UserRepository userRepository;
     private final HabitRepository habitRepository;
@@ -49,19 +68,28 @@ public class PlanetService {
     private final PointLogRepository pointLogRepository;
     private final FocusSessionRepository focusRepository;
     private final PlanetMessageRepository messageRepository;
+    private final PlanetDecorationRepository decorationRepository;
+    private final GamificationService gamificationService;
+    private final WorldObjectRepository worldObjectRepository;
 
     public PlanetService(UserRepository userRepository,
                          HabitRepository habitRepository,
                          HabitCheckinRepository checkinRepository,
                          PointLogRepository pointLogRepository,
                          FocusSessionRepository focusRepository,
-                         PlanetMessageRepository messageRepository) {
+                         PlanetMessageRepository messageRepository,
+                         PlanetDecorationRepository decorationRepository,
+                         GamificationService gamificationService,
+                         WorldObjectRepository worldObjectRepository) {
         this.userRepository = userRepository;
         this.habitRepository = habitRepository;
         this.checkinRepository = checkinRepository;
         this.pointLogRepository = pointLogRepository;
         this.focusRepository = focusRepository;
         this.messageRepository = messageRepository;
+        this.decorationRepository = decorationRepository;
+        this.gamificationService = gamificationService;
+        this.worldObjectRepository = worldObjectRepository;
     }
 
     /** 我的星球 */
@@ -101,6 +129,128 @@ public class PlanetService {
         messageRepository.save(msg);
     }
 
+    /** 建造装饰：扣积分并放置到地表指定位置 */
+    @Transactional
+    public PlanetDecoration addDecoration(Long userId, String code, double posX) {
+        DecorationItem item;
+        try {
+            item = DecorationItem.valueOf(code == null ? "" : code.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("未知的装饰");
+        }
+        if (!Double.isFinite(posX) || posX < 0 || posX > 100) {
+            throw ApiException.badRequest("装饰位置必须在 0 到 100 之间");
+        }
+        double normalizedPosX = Math.round(posX * 10.0) / 10.0;
+        // 与世界建造一样先锁住用户，保证并发放置时也只有一个请求消费余额。
+        userRepository.findForUpdateById(userId)
+                .orElseThrow(() -> ApiException.notFound("用户不存在"));
+        gamificationService.redeem(userId, item.getCost(),
+                "建造装饰：" + item.getEmoji() + " " + item.getTitle());
+        PlanetDecoration deco = new PlanetDecoration();
+        deco.setUserId(userId);
+        deco.setCode(item);
+        deco.setPosX(normalizedPosX);
+        return decorationRepository.save(deco);
+    }
+
+    /** 拆除装饰（不退积分） */
+    @Transactional
+    public void removeDecoration(Long userId, Long decorationId) {
+        if (decorationId == null || decorationId <= 0) {
+            throw ApiException.notFound("装饰不存在");
+        }
+        PlanetDecoration deco = decorationRepository.findById(decorationId)
+                .orElseThrow(() -> ApiException.notFound("装饰不存在"));
+        if (!deco.getUserId().equals(userId)) {
+            throw ApiException.notFound("装饰不存在");
+        }
+        decorationRepository.delete(deco);
+    }
+
+    /** 在 3D 世界指定坐标建造，费用与坐标都由服务端校验。 */
+    @Transactional
+    public WorldObjectView buildWorldObject(Long userId, String kind, Double x, Double z) {
+        WorldItem item;
+        try {
+            item = WorldItem.valueOf(kind == null ? "" : kind.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("未知的建造项目");
+        }
+        if (x == null || z == null || !Double.isFinite(x) || !Double.isFinite(z)) {
+            throw ApiException.badRequest("建造坐标不能为空且必须是有效数字");
+        }
+        double newRadius = placementRadius(item);
+        // 整个建筑占地都必须留在可建造区域内，而不只是中心点在边界内。
+        double centerLimit = WORLD_LIMIT - newRadius;
+        if (Math.abs(x) > centerLimit || Math.abs(z) > centerLimit) {
+            throw ApiException.badRequest("只能在星球可建造区域内放置");
+        }
+        double normalizedX = Math.round(x * 10.0) / 10.0;
+        double normalizedZ = Math.round(z * 10.0) / 10.0;
+
+        // 一个用户的建造请求串行化，避免并发放置导致建筑重叠或超额消费。
+        userRepository.findForUpdateById(userId)
+                .orElseThrow(() -> ApiException.notFound("用户不存在"));
+        List<WorldObject> objects = worldObjectRepository.findByUserIdOrderByCreatedAtAsc(userId);
+        if (objects.size() >= MAX_WORLD_OBJECTS) {
+            throw ApiException.badRequest("建造物已达上限，请先拆除一些建筑");
+        }
+        // 避免物件完全叠在一起；湖泊和大型建筑预留更大的空间。
+        boolean occupied = objects.stream().anyMatch(o -> {
+            // 两个占地圆都要完整分离，不能只取较大的那个半径。
+            double required = newRadius + placementRadius(o.getKind());
+            return Math.hypot(o.getX() - normalizedX, o.getZ() - normalizedZ) < required;
+        });
+        if (occupied) {
+            throw ApiException.badRequest("这里离其他建筑太近，请换一个位置");
+        }
+        gamificationService.redeem(userId, item.getCost(), "星球建造：" + item.getTitle());
+        WorldObject object = new WorldObject();
+        object.setUserId(userId);
+        object.setKind(item);
+        object.setX(normalizedX);
+        object.setZ(normalizedZ);
+        return WorldObjectView.from(worldObjectRepository.save(object));
+    }
+
+    @Transactional
+    public void removeWorldObject(Long userId, Long objectId) {
+        if (objectId == null || objectId <= 0) {
+            throw ApiException.notFound("建筑不存在");
+        }
+        WorldObject object = worldObjectRepository.findById(objectId)
+                .orElseThrow(() -> ApiException.notFound("建筑不存在"));
+        if (!object.getUserId().equals(userId)) {
+            throw ApiException.notFound("建筑不存在");
+        }
+        worldObjectRepository.delete(object);
+    }
+
+    @Transactional
+    public void updateAvatar(Long userId, String style, String color,
+                             String skinColor, String hairColor) {
+        String normalized = style == null ? "" : style.trim().toUpperCase();
+        if (!AVATAR_STYLES.contains(normalized)) {
+            throw ApiException.badRequest("未知的角色形象");
+        }
+        validateAvatarColor(color, "角色主题色");
+        validateAvatarColor(skinColor, "角色肤色");
+        validateAvatarColor(hairColor, "角色发色");
+        User user = mustFind(userId);
+        user.setAvatarStyle(normalized);
+        user.setAvatarColor(color.toUpperCase());
+        user.setAvatarSkinColor(skinColor.toUpperCase());
+        user.setAvatarHairColor(hairColor.toUpperCase());
+        userRepository.save(user);
+    }
+
+    private void validateAvatarColor(String color, String field) {
+        if (color == null || !color.matches("^#[0-9a-fA-F]{6}$")) {
+            throw ApiException.badRequest(field + "格式不正确");
+        }
+    }
+
     // ================= 内部实现 =================
 
     private Map<String, Object> planetOf(Long userId, boolean withMessages) {
@@ -118,6 +268,54 @@ public class PlanetService {
         m.put("level", GamificationService.levelOf(user.getXp()));
         m.put("buildings", buildings(userId));
         m.put("health", health(userId));
+        // 兼容升级前已经存在的用户：旧数据没有 avatarStyle，Set.of.contains(null)
+        // 会直接抛出 NPE，导致整个星球首页无法打开。
+        String avatarStyle = user.getAvatarStyle() != null
+                && AVATAR_STYLES.contains(user.getAvatarStyle())
+                ? user.getAvatarStyle() : "EXPLORER";
+        String avatarColor = user.getAvatarColor() != null
+                && user.getAvatarColor().matches("^#[0-9a-fA-F]{6}$")
+                ? user.getAvatarColor() : "#57E6D5";
+        String skinColor = user.getAvatarSkinColor() != null
+                && user.getAvatarSkinColor().matches("^#[0-9a-fA-F]{6}$")
+                ? user.getAvatarSkinColor() : "#E0AD82";
+        String hairColor = user.getAvatarHairColor() != null
+                && user.getAvatarHairColor().matches("^#[0-9a-fA-F]{6}$")
+                ? user.getAvatarHairColor() : "#4C3328";
+        m.put("avatar", Map.of(
+                "style", avatarStyle,
+                "color", avatarColor,
+                "skinColor", skinColor,
+                "hairColor", hairColor));
+        m.put("worldObjects", worldObjectRepository.findByUserIdOrderByCreatedAtAsc(userId).stream()
+                .map(WorldObjectView::from)
+                .toList());
+        m.put("worldCatalog", Arrays.stream(WorldItem.values())
+                .map(item -> Map.<String, Object>of(
+                        "code", item.name(), "title", item.getTitle(),
+                        "category", item.getCategory(), "cost", item.getCost(),
+                        "description", item.getDescription()))
+                .toList());
+        m.put("decorations", decorationRepository.findByUserIdOrderByCreatedAtAsc(userId).stream()
+                .map(d -> {
+                    Map<String, Object> dm = new HashMap<>();
+                    dm.put("id", d.getId());
+                    dm.put("code", d.getCode().name());
+                    dm.put("emoji", d.getCode().getEmoji());
+                    dm.put("title", d.getCode().getTitle());
+                    dm.put("orbit", d.getCode().isOrbit());
+                    dm.put("posX", d.getPosX());
+                    return dm;
+                })
+                .toList());
+        m.put("catalog", Arrays.stream(DecorationItem.values())
+                .map(item -> Map.<String, Object>of(
+                        "code", item.name(),
+                        "emoji", item.getEmoji(),
+                        "title", item.getTitle(),
+                        "cost", item.getCost(),
+                        "orbit", item.isOrbit()))
+                .toList());
         m.put("today", Map.of(
                 "checkins", checkinRepository.findByUserIdAndCheckinDate(userId, today).size(),
                 "focusMinutes", focusRepository.sumMinutes(userId, dayStart, dayEnd)));
@@ -169,6 +367,17 @@ public class PlanetService {
             }
         }
         return level; // 0=工地, 1..4
+    }
+
+    private double placementRadius(WorldItem item) {
+        return switch (item) {
+            case CASTLE -> 22;
+            case LIBRARY -> 18;
+            case FARM, LAKE -> 15;
+            case FOREST -> 13;
+            case CABIN, PAVILION, FOUNTAIN, CAMP, GARDEN -> 8;
+            default -> 6;
+        };
     }
 
     /** 健康度：最近 7 天失败/产出 → FLOURISHING / GLOOMY / DESERT */

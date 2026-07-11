@@ -48,6 +48,24 @@ public class User {
     @Column(length = 30)
     private String planetName;
 
+    /**
+     * 3D 世界中的方块角色职业外观。
+     * 兼容已有用户数据：旧行可以为 null，读取时由 PlanetService 补默认值。
+     */
+    @Column(length = 20)
+    private String avatarStyle = "EXPLORER";
+
+    /** 角色主题色（#RRGGBB） */
+    @Column(length = 10)
+    private String avatarColor = "#57e6d5";
+
+    /** 方块角色肤色与发色，让角色不只是职业预设换色。 */
+    @Column(length = 10)
+    private String avatarSkinColor = "#E0AD82";
+
+    @Column(length = 10)
+    private String avatarHairColor = "#4C3328";
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }
