@@ -34,6 +34,10 @@ public class WorldObject {
     @Column(nullable = false)
     private double z;
 
+    /** 摆件等级 1..maxLevel；default 1 保证老数据自动补齐 */
+    @Column(nullable = false, columnDefinition = "int not null default 1")
+    private int level = 1;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }

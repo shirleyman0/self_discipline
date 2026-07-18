@@ -55,10 +55,13 @@ public class PlanetService {
             "EXPLORER", "ARCHITECT", "RANGER", "ASTRONAUT");
 
     /** 稳定的 API 输出 DTO，不把 userId 等持久化细节暴露给前端。 */
-    public record WorldObjectView(Long id, String kind, String title, double x, double z) {
+    public record WorldObjectView(Long id, String kind, String title, double x, double z,
+                                  int level, int maxLevel, boolean keystone) {
         static WorldObjectView from(WorldObject object) {
-            return new WorldObjectView(object.getId(), object.getKind().name(),
-                    object.getKind().getTitle(), object.getX(), object.getZ());
+            WorldItem item = object.getKind();
+            return new WorldObjectView(object.getId(), item.name(), item.getTitle(),
+                    object.getX(), object.getZ(),
+                    Math.max(1, object.getLevel()), item.getMaxLevel(), item.isKeystone());
         }
     }
 
@@ -168,7 +171,7 @@ public class PlanetService {
         decorationRepository.delete(deco);
     }
 
-    /** 在 3D 世界指定坐标建造，费用与坐标都由服务端校验。 */
+    /** 在 3D 世界指定坐标建造，费用、纪元解锁与坐标都由服务端校验。 */
     @Transactional
     public WorldObjectView buildWorldObject(Long userId, String kind, Double x, Double z) {
         WorldItem item;
@@ -196,11 +199,20 @@ public class PlanetService {
         if (objects.size() >= MAX_WORLD_OBJECTS) {
             throw ApiException.badRequest("建造物已达上限，请先拆除一些建筑");
         }
+        // 纪元锁：里程碑要求上一纪元已解锁，普通摆件要求所属纪元已解锁。
+        int unlocked = unlockedEpoch(objects);
+        int required = item.isKeystone() ? item.getEpoch() - 1 : item.getEpoch();
+        if (unlocked < required) {
+            throw ApiException.badRequest("「" + item.getTitle() + "」尚未解锁，请先完成上一纪元的里程碑工程");
+        }
+        if (item.isKeystone() && objects.stream().anyMatch(o -> o.getKind() == item)) {
+            throw ApiException.badRequest("「" + item.getTitle() + "」是里程碑工程，整颗星球只能建造一座");
+        }
         // 避免物件完全叠在一起；湖泊和大型建筑预留更大的空间。
         boolean occupied = objects.stream().anyMatch(o -> {
             // 两个占地圆都要完整分离，不能只取较大的那个半径。
-            double required = newRadius + placementRadius(o.getKind());
-            return Math.hypot(o.getX() - normalizedX, o.getZ() - normalizedZ) < required;
+            double requiredGap = newRadius + placementRadius(o.getKind());
+            return Math.hypot(o.getX() - normalizedX, o.getZ() - normalizedZ) < requiredGap;
         });
         if (occupied) {
             throw ApiException.badRequest("这里离其他建筑太近，请换一个位置");
@@ -212,6 +224,48 @@ public class PlanetService {
         object.setX(normalizedX);
         object.setZ(normalizedZ);
         return WorldObjectView.from(worldObjectRepository.save(object));
+    }
+
+    /** 摆件升级：扣 cost × 当前等级 的积分，外观逐级豪华。 */
+    @Transactional
+    public WorldObjectView upgradeWorldObject(Long userId, Long objectId) {
+        if (objectId == null || objectId <= 0) {
+            throw ApiException.notFound("建筑不存在");
+        }
+        // 与建造一样先锁用户，防止并发升级双扣或跳级。
+        userRepository.findForUpdateById(userId)
+                .orElseThrow(() -> ApiException.notFound("用户不存在"));
+        WorldObject object = worldObjectRepository.findById(objectId)
+                .orElseThrow(() -> ApiException.notFound("建筑不存在"));
+        if (!object.getUserId().equals(userId)) {
+            throw ApiException.notFound("建筑不存在");
+        }
+        WorldItem item = object.getKind();
+        int level = Math.max(1, object.getLevel());
+        if (item.isKeystone() || level >= item.getMaxLevel()) {
+            throw ApiException.badRequest("「" + item.getTitle() + "」已经是最高等级");
+        }
+        gamificationService.redeem(userId, item.upgradeCost(level),
+                "升级建筑：" + item.getTitle() + " → Lv." + (level + 1));
+        object.setLevel(level + 1);
+        return WorldObjectView.from(worldObjectRepository.save(object));
+    }
+
+    /**
+     * 已解锁的最高纪元：
+     *  - 里程碑工程逐级解锁（动物纪方舟落成后直接开放文明纪）；
+     *  - 老存档兜底：只要拥有某纪元的任意摆件，视为该纪元及之前全部解锁，
+     *    避免升级前建好的世界因为缺里程碑而倒退回荒芜月面。
+     */
+    private int unlockedEpoch(List<WorldObject> objects) {
+        int unlocked = 0;
+        for (WorldObject o : objects) {
+            WorldItem k = o.getKind();
+            unlocked = Math.max(unlocked, k.isKeystone() ? k.getEpoch() : Math.min(6, k.getEpoch()));
+        }
+        // 连续里程碑链才是正路，但上面的 max 已经覆盖“拥有即解锁”的兜底；
+        // 动物纪（5）的方舟建成后没有第 6 纪元里程碑，直接放行文明纪。
+        return unlocked >= 5 ? 6 : unlocked;
     }
 
     @Transactional
@@ -287,14 +341,32 @@ public class PlanetService {
                 "color", avatarColor,
                 "skinColor", skinColor,
                 "hairColor", hairColor));
-        m.put("worldObjects", worldObjectRepository.findByUserIdOrderByCreatedAtAsc(userId).stream()
+        List<WorldObject> worldObjects = worldObjectRepository.findByUserIdOrderByCreatedAtAsc(userId);
+        int unlockedEpoch = unlockedEpoch(worldObjects);
+        Set<WorldItem> ownedKinds = worldObjects.stream()
+                .map(WorldObject::getKind)
+                .collect(Collectors.toSet());
+        m.put("worldObjects", worldObjects.stream()
                 .map(WorldObjectView::from)
                 .toList());
+        m.put("unlockedEpoch", unlockedEpoch);
         m.put("worldCatalog", Arrays.stream(WorldItem.values())
-                .map(item -> Map.<String, Object>of(
-                        "code", item.name(), "title", item.getTitle(),
-                        "category", item.getCategory(), "cost", item.getCost(),
-                        "description", item.getDescription()))
+                .map(item -> {
+                    boolean locked = unlockedEpoch <
+                            (item.isKeystone() ? item.getEpoch() - 1 : item.getEpoch());
+                    Map<String, Object> im = new HashMap<>();
+                    im.put("code", item.name());
+                    im.put("title", item.getTitle());
+                    im.put("category", item.getCategory());
+                    im.put("cost", item.getCost());
+                    im.put("description", item.getDescription());
+                    im.put("epoch", item.getEpoch());
+                    im.put("keystone", item.isKeystone());
+                    im.put("maxLevel", item.getMaxLevel());
+                    im.put("locked", locked);
+                    im.put("owned", ownedKinds.contains(item));
+                    return im;
+                })
                 .toList());
         m.put("decorations", decorationRepository.findByUserIdOrderByCreatedAtAsc(userId).stream()
                 .map(d -> {
@@ -373,10 +445,14 @@ public class PlanetService {
         return switch (item) {
             case CASTLE -> 22;
             case LIBRARY -> 18;
+            case ARK -> 16;
             case FARM, LAKE -> 15;
             case FOREST -> 13;
-            case CABIN, PAVILION, FOUNTAIN, CAMP, GARDEN -> 8;
-            default -> 6;
+            case OBSERVATORY -> 12;
+            case SEEDVAULT -> 10;
+            case CABIN, PAVILION, FOUNTAIN, CAMP, GARDEN,
+                 CRATER, SPRING, ATMOSPHERE, COMET, SOUP -> 8;
+            default -> 6; // ROCKS/CRYSTAL/ROVER/STROMA/MUSHROOM/FIREFLY
         };
     }
 

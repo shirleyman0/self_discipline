@@ -94,6 +94,12 @@ public class PlanetController {
         planetService.removeWorldObject(CurrentUser.id(), id);
     }
 
+    /** 摆件升级（扣积分，外观逐级豪华） */
+    @PostMapping("/world/objects/{id}/upgrade")
+    public PlanetService.WorldObjectView upgradeWorldObject(@PathVariable Long id) {
+        return planetService.upgradeWorldObject(CurrentUser.id(), id);
+    }
+
     @PutMapping("/avatar")
     public void avatar(@RequestBody @Valid AvatarRequest req) {
         planetService.updateAvatar(CurrentUser.id(), req.style(), req.color(),

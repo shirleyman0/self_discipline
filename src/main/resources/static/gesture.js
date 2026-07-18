@@ -17,7 +17,9 @@
     }
 
     // Pin the runtime so a CDN update cannot silently change gesture behaviour.
-    const MEDIAPIPE_VERSION = "0.10.22";
+    // 注意：必须是 npm 上真实发布过的稳定版。0.10.22 只有 rc 预发布、无正式版，
+    // 会导致 CDN 404、手势模型加载失败。0.10.21 是紧邻的最后一个稳定版。
+    const MEDIAPIPE_VERSION = "0.10.21";
     const MEDIAPIPE_MODULE =
         `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/vision_bundle.mjs`;
     const MEDIAPIPE_WASM =

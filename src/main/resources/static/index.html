@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>自律星球 · 用自律养大你的星球</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="stylesheet" href="/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <!-- 首页(轨道视角)只需要 Vue + 全局 Three(星球渲染)。
+         ECharts 与地表世界的 Three 模块改为按需加载，见 app.js 的 ensureECharts / ensureWorld3D。 -->
+    <script defer src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
     <script type="importmap">
     {
         "imports": {
@@ -35,6 +37,7 @@
          @mousemove="sceneParallax">
         <!-- 深空星云（视差层） -->
         <template v-if="!surfaceMode">
+            <canvas class="neon-fx" aria-hidden="true"></canvas>
             <div class="galaxy-core"></div>
             <div class="cosmic-dust dust-a"></div>
             <div class="cosmic-dust dust-b"></div>
@@ -43,6 +46,12 @@
             <div class="nebula n3"></div>
             <div class="shoot s1"></div>
             <div class="shoot s2"></div>
+            <div class="scene-vignette"></div>
+            <div class="scene-grain"></div>
+            <!-- 四角取景框：一眼科幻仪表盘质感 -->
+            <div class="hud-frame" aria-hidden="true">
+                <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
+            </div>
         </template>
         <!-- 天气 -->
         <template v-if="sceneHealth === 'FLOURISHING'">
@@ -103,13 +112,22 @@
         <div class="planet-stage" :class="{warping: warping, dive: landing}" v-show="!surfaceMode">
             <div class="planet3d-wrap" :class="'health-' + sceneHealth" ref="planetMount"
                  :title="scenePlanet.planetName"></div>
+            <!-- 环绕星球的发光轨道环（纯装饰，倾斜透视） -->
+            <div class="orbit-rings" aria-hidden="true">
+                <i class="orbit-ring r1"></i>
+                <i class="orbit-ring r2"></i>
+                <i class="orbit-ring r3"></i>
+            </div>
             <!-- 轨道装饰：卫星 / 小月亮 -->
             <div class="orbiter" v-for="(o, i) in orbitDecos" :key="'o' + o.id"
                  :style="{width: (560 + i * 84) + 'px', height: (560 + i * 84) + 'px',
                           animationDuration: (36 + i * 16) + 's'}">
                 <span :style="{fontSize: o.code === 'MOON' ? '42px' : '26px',
                                animationDuration: (36 + i * 16) + 's'}"
-                      @click.stop="decoClick(o)">{{ o.emoji }}</span>
+                      @click.stop="decoClick(o)">
+                    <i v-if="o.code === 'MOON'" class="moon-orb" :title="o.title"></i>
+                    <template v-else>{{ o.emoji }}</template>
+                </span>
             </div>
             <div class="land-hint">▼ 点击星球 · 降落到地表</div>
         </div>
@@ -128,6 +146,28 @@
                 </button>
             </div>
             <div class="crosshair" v-if="placing"><i></i><i></i></div>
+            <div class="world-action" v-if="worldAction && !visiting">
+                <header>
+                    <b>{{ worldAction.title }}</b>
+                    <span class="wa-stars" v-if="!worldAction.keystone">
+                        <i v-for="n in worldAction.maxLevel" :key="n" :class="{on: n <= worldAction.level}">★</i>
+                    </span>
+                    <span class="wa-keystone" v-else>✦ 里程碑</span>
+                </header>
+                <p>{{ worldAction.description }}</p>
+                <div class="wa-btns">
+                    <button v-if="!worldAction.keystone && worldAction.level < worldAction.maxLevel"
+                            :disabled="upgradingBusy || (profile && profile.points < worldAction.cost * worldAction.level)"
+                            @click="upgradeWorldAction">
+                        {{ upgradingBusy ? '升级中…'
+                            : (profile && profile.points < worldAction.cost * worldAction.level ? '积分不足'
+                                : '⬆ 升级到 Lv.' + (worldAction.level + 1) + '（' + worldAction.cost * worldAction.level + 'P）') }}
+                    </button>
+                    <span class="wa-max" v-else-if="!worldAction.keystone">已是最高等级 ✨</span>
+                    <button class="wa-danger" @click="demolishWorldAction">拆除</button>
+                    <button class="wa-ghost" @click="worldAction = null">关闭</button>
+                </div>
+            </div>
             <div class="world-toolbar" v-if="!visiting">
                 <button @click="toggleWorldBuilder" :class="{active: worldBuilderOpen}">
                     <span>⌑</span><b>创造</b>
@@ -144,13 +184,20 @@
                 <header><div><small>CREATIVE INVENTORY</small><h2>世界创造台</h2></div><button @click="worldBuilderOpen=false">×</button></header>
                 <p class="builder-balance">可用建造积分 <b>{{ profile ? profile.points : 0 }} P</b></p>
                 <div class="blueprint-grid" v-if="scenePlanet">
-                    <button class="blueprint" v-for="item in scenePlanet.worldCatalog" :key="item.code"
-                            :disabled="profile && profile.points < item.cost"
-                            @click="startWorldBuild(item)">
-                        <span class="block-preview" :class="'bp-' + item.code.toLowerCase()"></span>
-                        <strong>{{ item.title }}</strong><small>{{ item.description }}</small>
-                        <em>{{ item.cost }} P</em>
-                    </button>
+                    <template v-for="g in builderEpochGroups" :key="g.epoch">
+                        <div class="epoch-head compact" :class="{locked: g.locked}">
+                            <b>{{ g.name }}</b><span v-if="g.locked">🔒</span>
+                        </div>
+                        <button class="blueprint" v-for="item in g.items" :key="item.code"
+                                :class="{'bp-keystone': item.keystone, 'bp-locked': item.locked}"
+                                :disabled="item.locked || (item.keystone && item.owned) || (profile && profile.points < item.cost)"
+                                @click="startWorldBuild(item)">
+                            <span class="block-preview" :class="'bp-' + item.code.toLowerCase()"></span>
+                            <strong>{{ item.keystone ? '✦ ' + item.title : item.title }}</strong>
+                            <small>{{ item.description }}</small>
+                            <em>{{ item.locked ? '🔒 未解锁' : (item.keystone && item.owned ? '✔ 已落成' : item.cost + ' P') }}</em>
+                        </button>
+                    </template>
                 </div>
             </aside>
             <aside class="avatar-studio" v-if="avatarOpen && !visiting">
@@ -188,10 +235,9 @@
         <!-- 底部格言 -->
         <div class="hero-copy" v-if="!surfaceMode && !visiting">
             <small>YOUR WORLD · YOUR DISCIPLINE</small>
-            <strong>让坚持，成为一颗真实生长的星球</strong>
             <span>点击中央星球，进入你亲手创造的世界</span>
+            <div class="quote-line">「 {{ quote }} 」</div>
         </div>
-        <div class="quote-line" v-if="!visiting && !surfaceMode">「 {{ quote }} 」</div>
 
         <!-- 访问模式：留言表单 -->
         <div class="dock" v-if="visiting && !surfaceMode" style="gap:10px;padding:10px 16px">
@@ -204,17 +250,17 @@
             <button class="btn-sm" @click="sendPlanetMessage">留言</button>
         </div>
 
-        <!-- 底部 dock（自己的星球） -->
-        <div class="dock" v-else-if="!surfaceMode">
-            <button data-tip="星球档案" :class="{on: panel==='planet'}" @click="openPanel('planet')">🪐</button>
-            <button data-tip="每日打卡" :class="{on: panel==='habits'}" @click="openPanel('habits')">✅</button>
-            <button data-tip="任务清单" :class="{on: panel==='tasks'}" @click="openPanel('tasks')">📋</button>
-            <button data-tip="专注舱" :class="{on: panel==='focus'}" @click="openPanel('focus')">⏱️</button>
-            <button data-tip="奖励商店" :class="{on: panel==='shop'}" @click="openPanel('shop')">🛍️</button>
-            <button data-tip="共航搭档" :class="{on: panel==='partner'}" @click="openPanel('partner')">👥
+        <!-- 侧边 dock（自己的星球） -->
+        <div class="dock dock-side" v-else-if="!surfaceMode">
+            <button aria-label="星球档案" data-tip="星球档案" :class="{on: panel==='planet'}" @click="openPanel('planet')">🪐</button>
+            <button aria-label="每日打卡" data-tip="每日打卡" :class="{on: panel==='habits'}" @click="openPanel('habits')">✅</button>
+            <button aria-label="任务清单" data-tip="任务清单" :class="{on: panel==='tasks'}" @click="openPanel('tasks')">📋</button>
+            <button aria-label="专注舱" data-tip="专注舱" :class="{on: panel==='focus'}" @click="openPanel('focus')">⏱️</button>
+            <button aria-label="奖励商店" data-tip="奖励商店" :class="{on: panel==='shop'}" @click="openPanel('shop')">🛍️</button>
+            <button aria-label="共航搭档" data-tip="共航搭档" :class="{on: panel==='partner'}" @click="openPanel('partner')">👥
                 <span class="badge" v-if="unreadNudges > 0">{{ unreadNudges }}</span>
             </button>
-            <button data-tip="数据舱" :class="{on: panel==='stats'}" @click="openPanel('stats')">📊</button>
+            <button aria-label="数据舱" data-tip="数据舱" :class="{on: panel==='stats'}" @click="openPanel('stats')">📊</button>
         </div>
     </div>
 
@@ -255,6 +301,8 @@
                                  v-for="(t, i) in tierLadder" :key="i"
                                  :class="{now: tierPreview ? tierPreview === i + 1 : t.now, past: t.past}"
                                  @click="tierPreview = tierPreview === i + 1 ? null : i + 1">
+                                <span class="tier-orb-box"><i :class="'tier-orb t' + (i + 1)"
+                                      :style="{width: (11 + i * 2) + 'px', height: (11 + i * 2) + 'px'}"></i></span>
                                 <span>{{ t.now ? '📍' : (t.past ? '✅' : '🔒') }}</span>
                                 <b>{{ t.name }}</b>
                                 <span class="muted">Lv.{{ t.minLevel }}+ · {{ t.desc }}</span>
@@ -419,16 +467,28 @@
                     </div>
 
                     <div class="card world-store-card">
-                        <h3>◈ 世界创造中心 <span class="muted" style="font-weight:400">打卡赚积分，把空地变成真正的世界</span></h3>
+                        <h3>◈ 盖亚改造计划 <span class="muted" style="font-weight:400">重走地球演化史：大气 → 海洋 → 生命 → 绿洲 → 生灵 → 文明</span></h3>
                         <div class="world-store-grid" v-if="myPlanet">
-                            <article v-for="c in myPlanet.worldCatalog" :key="c.code">
-                                <span class="block-preview" :class="'bp-' + c.code.toLowerCase()"></span>
-                                <div><b>{{ c.title }}</b><small>{{ c.category }} · {{ c.description }}</small></div>
-                                <strong>{{ c.cost }} P</strong>
-                                <button class="btn-sm" @click="startWorldBuild(c)" :disabled="profile && profile.points < c.cost">
-                                    {{ profile && profile.points < c.cost ? '积分不足' : '进入世界建造' }}
-                                </button>
-                            </article>
+                            <template v-for="g in shopEpochGroups" :key="g.epoch">
+                                <div class="epoch-head" :class="{locked: g.locked}">
+                                    <b>EPOCH {{ g.epoch }} · {{ g.name }}</b>
+                                    <span v-if="g.locked">🔒 完成上一纪元的里程碑工程后解锁</span>
+                                </div>
+                                <article v-for="c in g.items" :key="c.code"
+                                         :class="{'ws-keystone': c.keystone, 'ws-locked': c.locked, 'ws-owned': c.keystone && c.owned}">
+                                    <span class="block-preview" :class="'bp-' + c.code.toLowerCase()"></span>
+                                    <div>
+                                        <b>{{ c.keystone ? '✦ ' : '' }}{{ c.title }}</b>
+                                        <small>{{ c.keystone ? '里程碑工程 · ' : ('可升级 Lv.' + c.maxLevel + ' · ') }}{{ c.description }}</small>
+                                    </div>
+                                    <strong>{{ c.cost }} P</strong>
+                                    <button class="btn-sm" @click="startWorldBuild(c)"
+                                            :disabled="c.locked || (c.keystone && c.owned) || (profile && profile.points < c.cost)">
+                                        {{ c.locked ? '🔒 未解锁' : (c.keystone && c.owned ? '✔ 已落成'
+                                            : (profile && profile.points < c.cost ? '积分不足' : '进入世界建造')) }}
+                                    </button>
+                                </article>
+                            </template>
                         </div>
                     </div>
 
@@ -613,9 +673,10 @@
         </aside>
     </transition>
 </div>
-<script src="/planet3d.js"></script>
-<script type="module" src="/world3d.js"></script>
-<script src="/gesture.js"></script>
-<script src="/app.js"></script>
+<!-- world3d.js(含地表 Three 模块) 不在此静态加载，改为首次降落时按需注入，避免首页白下载 ~600KB。 -->
+<script defer src="/neon-fx.js"></script>
+<script defer src="/planet3d.js"></script>
+<script defer src="/gesture.js"></script>
+<script defer src="/app.js"></script>
 </body>
 </html>

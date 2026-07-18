@@ -86,8 +86,10 @@ class PlanetServiceTest {
     void buildUsesSumOfBothRadiiForCollisionDetection() {
         User user = user(1L, 1_000);
         WorldObject rocks = worldObject(8L, WorldItem.ROCKS, 25.0, 0.0);
+        // 方舟已经建成，文明纪（城堡）才处于解锁状态。
+        WorldObject ark = worldObject(9L, WorldItem.ARK, -100.0, -100.0);
         when(userRepository.findForUpdateById(1L)).thenReturn(Optional.of(user));
-        when(worldObjectRepository.findByUserIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(rocks));
+        when(worldObjectRepository.findByUserIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(rocks, ark));
 
         // 城堡半径 22 + 岩石半径 6 = 28；中心距 25 必须被拒绝。
         ApiException error = assertThrows(ApiException.class,
@@ -101,8 +103,9 @@ class PlanetServiceTest {
     @Test
     void buildAcceptsExactBoundaryAndPersistsNormalizedObject() {
         User user = user(1L, 1_000);
+        WorldObject ark = worldObject(9L, WorldItem.ARK, -100.0, -100.0);
         when(userRepository.findForUpdateById(1L)).thenReturn(Optional.of(user));
-        when(worldObjectRepository.findByUserIdOrderByCreatedAtAsc(1L)).thenReturn(List.of());
+        when(worldObjectRepository.findByUserIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(ark));
         when(gamificationService.redeem(eq(1L), eq(800L), any())).thenReturn(200L);
         when(worldObjectRepository.save(any(WorldObject.class))).thenAnswer(invocation -> {
             WorldObject object = invocation.getArgument(0);

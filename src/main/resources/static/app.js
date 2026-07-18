@@ -31,6 +31,51 @@ async function api(path, options = {}) {
     return data;
 }
 
+// ===== 按需加载重依赖 =====
+// 首页(轨道视角)不需要 ECharts / 地表 Three 模块，改为用到时才注入，
+// 首屏因此少下载约 1.6MB JS。两个加载器都缓存 Promise，重复调用只加载一次。
+function loadScript(src, attrs = {}) {
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        Object.assign(s, attrs);
+        s.src = src;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('加载失败: ' + src));
+        document.head.appendChild(s);
+    });
+}
+
+let _echartsPromise = null;
+function ensureECharts() {
+    if (window.echarts) return Promise.resolve(window.echarts);
+    if (!_echartsPromise) {
+        _echartsPromise = loadScript('https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js')
+            .then(() => window.echarts)
+            .catch(err => { _echartsPromise = null; throw err; });
+    }
+    return _echartsPromise;
+}
+
+let _world3dPromise = null;
+function ensureWorld3D() {
+    if (window.World3D) return Promise.resolve(window.World3D);
+    if (!_world3dPromise) {
+        // world3d.js 是 ES module，会通过 importmap 解析 three 依赖。
+        _world3dPromise = loadScript('/world3d.js', { type: 'module' })
+            .then(() => new Promise((resolve, reject) => {
+                // 模块执行到 window.World3D = {...} 前 onload 已触发，短暂轮询兜底。
+                let tries = 0;
+                (function wait() {
+                    if (window.World3D) return resolve(window.World3D);
+                    if (++tries > 60) return reject(new Error('World3D 未就绪'));
+                    setTimeout(wait, 50);
+                })();
+            }))
+            .catch(err => { _world3dPromise = null; throw err; });
+    }
+    return _world3dPromise;
+}
+
 const PANEL_TITLES = {
     planet: { icon: '🪐', name: '星球档案', sub: '你的星球，你的编年史' },
     habits: { icon: '✅', name: '每日打卡', sub: '打卡越多，建筑越高级' },
@@ -146,6 +191,8 @@ const app = createApp({
                 { code: 'RANGER', name: '荒野守护者', mark: 'R' },
                 { code: 'ASTRONAUT', name: '深空宇航员', mark: 'S' }
             ],
+            worldAction: null,       // 点击自己的摆件后弹出的 升级/拆除 面板
+            upgradingBusy: false,
             gestureRunning: false,
             gestureStatus: '手势控制未开启',
             // 基础数据
@@ -235,6 +282,14 @@ const app = createApp({
             if (!this.profile) return 0;
             const p = this.profile.levelProgress;
             return p.needed === 0 ? 100 : Math.min(100, Math.round(p.current * 100 / p.needed));
+        },
+        /** 世界目录按纪元分组（奖励商店） */
+        shopEpochGroups() {
+            return this.epochGroupsOf(this.myPlanet && this.myPlanet.worldCatalog);
+        },
+        /** 世界目录按纪元分组（地表创造台） */
+        builderEpochGroups() {
+            return this.epochGroupsOf(this.scenePlanet && this.scenePlanet.worldCatalog);
         },
         /** 轨道装饰：卫星 / 小月亮 */
         orbitDecos() {
@@ -355,7 +410,7 @@ const app = createApp({
             if (!el || this._p3d) return;
             try {
                 this._p3d = Planet3D.mount(el, {
-                    size: 470,
+                    size: 640,
                     tier: this.sceneTier,
                     onClick: () => this.landOnPlanet()
                 });
@@ -368,16 +423,15 @@ const app = createApp({
         async initWorld3D() {
             if (!this.surfaceMode || this._world) return;
             const transitionSeq = this.surfaceTransitionSeq;
-            // world3d.js 是 ES module，首次降落时最多等待模块初始化 3 秒。
-            for (let i = 0; i < 30 && !window.World3D; i++) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            // 等待模块时用户可能已经升空或返航，不能再往旧 DOM 上挂载世界。
-            if (!this.surfaceMode || transitionSeq !== this.surfaceTransitionSeq || this._world) return;
-            if (!window.World3D) {
+            // 地表 Three 模块按需加载（点击星球降落时已开始预取，通常此处已就绪）。
+            try {
+                await ensureWorld3D();
+            } catch (e) {
                 this.toast('3D 世界引擎加载失败，请刷新页面重试', true);
                 return;
             }
+            // 等待模块时用户可能已经升空或返航，不能再往旧 DOM 上挂载世界。
+            if (!this.surfaceMode || transitionSeq !== this.surfaceTransitionSeq || this._world) return;
             const el = this.$refs.worldMount;
             if (!el || !el.isConnected) return;
             try {
@@ -385,6 +439,7 @@ const app = createApp({
                 const world = window.World3D.mount(el, {
                     seed: this.worldSeed(planet.nickname || planet.planetName || 'planet'),
                     health: planet.health ? planet.health.state : 'FLOURISHING',
+                    level: planet.level || 1,
                     objects: planet.worldObjects || [],
                     avatar: planet.avatar || this.avatarForm,
                     readonly: this.visiting,
@@ -421,6 +476,7 @@ const app = createApp({
             if (this._world) this._world.destroy();
             this._world = null;
             this.worldReady = false;
+            this.worldAction = null;
         },
         async rebuildWorld3D() {
             this.destroyWorld3D();
@@ -432,6 +488,8 @@ const app = createApp({
         landOnPlanet() {
             if (this.landing || this.warping || this.surfaceMode) return;
             blip(700, .12);
+            // 与降落动画并行预取地表 Three 模块，落地时通常已就绪。
+            ensureWorld3D().catch(() => {});
             this.landing = true;
             const transitionSeq = ++this.surfaceTransitionSeq;
             setTimeout(() => {
@@ -478,16 +536,43 @@ const app = createApp({
 
         sceneParallax(e) {
             if (this.surfaceMode) return;
-            const x = (e.clientX / window.innerWidth - .5) * 2;
-            const y = (e.clientY / window.innerHeight - .5) * 2;
-            e.currentTarget.style.setProperty('--mx', x.toFixed(3));
-            e.currentTarget.style.setProperty('--my', y.toFixed(3));
+            // mousemove 每帧可触发几十次，直接写 CSS 变量会让多层星云/尘埃反复重绘。
+            // 用 rAF 把写入合并到每帧一次。
+            const el = e.currentTarget;
+            this._parallax = {
+                el,
+                x: (e.clientX / window.innerWidth - .5) * 2,
+                y: (e.clientY / window.innerHeight - .5) * 2
+            };
+            if (this._parallaxRaf) return;
+            this._parallaxRaf = requestAnimationFrame(() => {
+                this._parallaxRaf = 0;
+                const p = this._parallax;
+                if (!p || !p.el.isConnected) return;
+                p.el.style.setProperty('--mx', p.x.toFixed(3));
+                p.el.style.setProperty('--my', p.y.toFixed(3));
+            });
         },
 
         // ---- 持久化世界建造 ----
+        /** 世界目录 → [{epoch, name, locked, items}]，商店与创造台共用 */
+        epochGroupsOf(catalog) {
+            const names = ['冥古宙 · 荒芜月面', '大气纪', '海洋纪', '生命纪', '绿色纪', '动物纪', '文明纪'];
+            const groups = [];
+            for (const item of (catalog || [])) {
+                let g = groups.find(x => x.epoch === item.epoch);
+                if (!g) groups.push(g = { epoch: item.epoch, name: names[item.epoch] || '', items: [] });
+                g.items.push(item);
+            }
+            groups.sort((a, b) => a.epoch - b.epoch);
+            groups.forEach(g => { g.locked = g.items.every(i => i.locked); });
+            return groups;
+        },
         async startWorldBuild(item) {
             if (this.visiting) return this.toast('只能在自己的星球建造', true);
             if (this.placingBusy) return this.toast('上一座建筑正在保存，请稍候', true);
+            if (item.locked) return this.toast('🔒 这个项目属于更晚的纪元，先完成上一纪元的里程碑工程', true);
+            if (item.keystone && item.owned) return this.toast('里程碑工程整颗星球只能建造一座', true);
             if (this.profile && this.profile.points < item.cost) return this.toast('积分不足，先去完成打卡吧', true);
             this.placing = item;
             this.panel = null;
@@ -520,20 +605,59 @@ const app = createApp({
                     await this.rebuildWorld3D();
                 }
                 blip(1760, .12);
-                this.toast(`「${item.title}」建造完成，已永久保存到你的星球`);
+                const cheer = {
+                    ATMOSPHERE: '🌬 盖亚大气机启动——抬头看，天空第一次泛起蓝色！',
+                    COMET: '☄️ 彗星坠入大气，第一场雨正落向洼地……',
+                    SOUP: '🦠 原初之汤开始翻涌，水边泛起第一抹藻绿',
+                    SEEDVAULT: '🌱 万物种子破土！草原蔓延，森林拔地而起',
+                    ARK: '🕊 生命方舟落成——飞鸟、游鱼与小兽来到你的星球'
+                }[item.code];
+                this.toast(cheer || `「${item.title}」建造完成，已永久保存到你的星球`);
             } catch (e) {
                 this.toast(e.message, true);
             } finally {
                 this.placingBusy = false;
             }
         },
-        async worldObjectClick(object) {
+        worldObjectClick(object) {
             if (!object || this.placing) return;
             if (this.visiting) return this.toast(`这是 TA 建造的「${object.title || object.kind}」`);
-            if (!confirm(`要拆除「${object.title || object.kind}」吗？拆除后不返还积分。`)) return;
+            const cat = ((this.scenePlanet && this.scenePlanet.worldCatalog) || [])
+                .find(c => c.code === object.kind) || {};
+            this.worldAction = {
+                ...object,
+                level: object.level || 1,
+                cost: cat.cost || 0,
+                maxLevel: cat.maxLevel || 3,
+                keystone: !!cat.keystone,
+                description: cat.description || ''
+            };
+        },
+        async upgradeWorldAction() {
+            const target = this.worldAction;
+            if (!target || this.upgradingBusy) return;
+            this.upgradingBusy = true;
             try {
-                await api(`/api/planet/world/objects/${object.id}`, { method: 'DELETE' });
-                if (this._world && this._world.removeObject) this._world.removeObject(object.id);
+                const updated = await api(`/api/planet/world/objects/${target.id}/upgrade`, { method: 'POST' });
+                this.worldAction = null;
+                await Promise.all([this.loadPlanet(), this.loadProfile()]);
+                if (this._world && this._world.upsertObject) this._world.upsertObject(updated);
+                blip(1560, .12);
+                this.toast(`✨「${updated.title}」升级到 Lv.${updated.level}，更加豪华了！`);
+            } catch (e) {
+                this.toast(e.message, true);
+            } finally {
+                this.upgradingBusy = false;
+            }
+        },
+        async demolishWorldAction() {
+            const target = this.worldAction;
+            if (!target) return;
+            if (!confirm(`要拆除「${target.title}」吗？拆除后不返还积分。`)) return;
+            this.worldAction = null;
+            try {
+                await api(`/api/planet/world/objects/${target.id}`, { method: 'DELETE' });
+                if (this._world && this._world.removeObject) this._world.removeObject(target.id);
                 await this.loadPlanet();
                 this.toast('建筑已拆除');
             } catch (e) {
@@ -817,7 +941,10 @@ const app = createApp({
         async showHeatmap(habit) {
             blip();
             this.heatmapHabit = habit;
-            const data = await api(`/api/habits/${habit.id}/heatmap?year=${this.heatmapYear}`);
+            const [data] = await Promise.all([
+                api(`/api/habits/${habit.id}/heatmap?year=${this.heatmapYear}`),
+                ensureECharts()
+            ]);
             this.$nextTick(() => {
                 const el = document.getElementById('heatmap');
                 if (!el) return;
@@ -939,6 +1066,7 @@ const app = createApp({
         async renderCompare() {
             try {
                 const data = await api('/api/partner/compare?range=week');
+                await ensureECharts();
                 this.$nextTick(() => {
                     const el = document.getElementById('compareChart');
                     if (!el) return;
@@ -1018,9 +1146,11 @@ const app = createApp({
             this.statsDays = data.days;
             this.$nextTick(() => this.renderTrend());
         },
-        renderTrend() {
+        async renderTrend() {
             const el = document.getElementById('trendChart');
             if (!el) return;
+            await ensureECharts();
+            if (!el.isConnected) return;
             const chart = echarts.getInstanceByDom(el) || echarts.init(el);
             const axis = {
                 axisLine: { lineStyle: { color: C.dim } },
@@ -1094,6 +1224,7 @@ const app = createApp({
         clearTimeout(this._autoSurfaceTimer);
         clearTimeout(this._travelTimer);
         clearInterval(this.timerHandle);
+        if (this._parallaxRaf) cancelAnimationFrame(this._parallaxRaf);
         if (this._onGlobalKeydown) window.removeEventListener('keydown', this._onGlobalKeydown);
         if (window.GestureControls) window.GestureControls.stop();
         this.destroyWorld3D();

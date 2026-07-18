@@ -18,6 +18,12 @@
     --blue: #60a5fa;
     --grad-main: linear-gradient(135deg, #57e6d5, #60a5fa);
     --grad-gold: linear-gradient(135deg, #ffd166, #ff9f43);
+    /* 高级玻璃拟态：更低透明 + 更强模糊 + 顶部高光描边 */
+    --glass: rgba(15, 21, 48, .52);
+    --glass-strong: rgba(13, 18, 42, .72);
+    --glass-border: rgba(150, 170, 245, .16);
+    --glass-hi: rgba(255, 255, 255, .1);
+    --glass-shadow: 0 18px 50px rgba(2, 5, 20, .55);
 }
 
 ::selection { background: var(--cyan); color: #0a0e23; }
@@ -29,6 +35,9 @@ body {
     background: var(--bg0);
     overflow: hidden;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 body.auth-body { overflow: auto; }
 
@@ -50,16 +59,42 @@ body.auth-body { overflow: auto; }
     isolation: isolate;
     --mx: 0;
     --my: 0;
+    animation: sceneReveal 1.2s ease both;
 }
+/* 首屏从深空中缓缓浮现 */
+@keyframes sceneReveal { from { opacity: 0; } to { opacity: 1; } }
 .scene.sky-night,
 .scene.sky-day,
 .scene.sky-dawn,
 .scene.sky-dusk {
     background:
-        radial-gradient(ellipse 70% 55% at 50% 118%, rgba(19,64,130,.45), transparent 72%),
-        radial-gradient(ellipse 50% 55% at 9% 15%, rgba(71,40,130,.32), transparent 72%),
-        radial-gradient(ellipse 45% 40% at 93% 25%, rgba(0,139,168,.18), transparent 75%),
-        linear-gradient(180deg, #02030d 0%, #050817 48%, #090d25 100%);
+        radial-gradient(ellipse 46% 40% at 50% 50%, rgba(58,110,200,.20), transparent 60%),
+        radial-gradient(ellipse 70% 55% at 50% 122%, rgba(19,64,130,.42), transparent 72%),
+        radial-gradient(ellipse 50% 55% at 8% 12%, rgba(78,44,140,.30), transparent 70%),
+        radial-gradient(ellipse 45% 40% at 94% 22%, rgba(0,139,168,.16), transparent 74%),
+        linear-gradient(180deg, #01020a 0%, #04061400 40%, #04040f 100%),
+        linear-gradient(180deg, #010209 0%, #04040f 52%, #070718 100%);
+}
+/* 暗角：把视线锁定到中央星球，边缘沉入深空，中心 42% 留空不压暗星球本体。 */
+.scene-vignette {
+    position: absolute; inset: 0; z-index: 4; pointer-events: none;
+    background:
+        radial-gradient(ellipse 62% 58% at 50% 45%, transparent 42%, rgba(2,4,14,.40) 76%, rgba(1,2,9,.80) 100%),
+        radial-gradient(ellipse 120% 80% at 50% 122%, rgba(60,120,220,.10), transparent 58%);
+    mix-blend-mode: multiply;
+    animation: fadeInSlow 2.2s ease both;
+}
+/* 极淡胶片颗粒：消除大面积渐变的"塑料感"，提升质感。静态即可，不animate满屏层。 */
+.scene-grain {
+    position: absolute; inset: 0; z-index: 4; pointer-events: none;
+    opacity: .06; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* 霓虹粒子画布：铺满场景、沉在星球之后（z-index:-1），JS 在 neon-fx.js 里绘制。 */
+.neon-fx {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    z-index: -1; pointer-events: none; display: block;
+    animation: fadeInSlow 2s ease both;
 }
 
 /* 深空首页：星系核心、宇宙尘埃、星云都随鼠标产生不同深度的视差。 */
@@ -68,11 +103,13 @@ body.auth-body { overflow: auto; }
     background:
         radial-gradient(ellipse 28% 9% at 50% 49%, rgba(255,255,255,.7), rgba(91,190,255,.25) 16%, transparent 60%),
         conic-gradient(from 18deg at 50% 50%, transparent 0 10%, rgba(70,92,255,.09) 14%, transparent 23% 52%, rgba(130,50,255,.09) 61%, transparent 73%);
-    filter: blur(10px); opacity: .75;
+    filter: blur(12px); opacity: .75;
     transform: translate(calc(var(--mx) * -13px), calc(var(--my) * -9px)) rotate(-12deg);
     animation: galaxyBreath 12s ease-in-out infinite;
+    will-change: opacity;
 }
-@keyframes galaxyBreath { 50% { opacity: 1; filter: blur(15px) brightness(1.25); } }
+/* 只动 opacity：动画 blur 会让满屏元素每帧重算模糊，非常耗性能。 */
+@keyframes galaxyBreath { 50% { opacity: 1; } }
 .cosmic-dust { position:absolute; pointer-events:none; z-index:-1; width:75vw; height:28vw; border-radius:50%; filter:blur(42px); mix-blend-mode:screen; }
 .dust-a { left:-13vw; top:4vh; background:linear-gradient(115deg, transparent, rgba(91,51,178,.22), rgba(36,138,194,.13), transparent); transform:rotate(-23deg) translate(calc(var(--mx) * 22px), calc(var(--my) * 14px)); }
 .dust-b { right:-18vw; bottom:0; background:linear-gradient(100deg, transparent, rgba(28,103,170,.20), rgba(153,62,188,.13), transparent); transform:rotate(17deg) translate(calc(var(--mx) * -28px), calc(var(--my) * -16px)); }
@@ -136,6 +173,47 @@ body.auth-body { overflow: auto; }
 }
 @keyframes dustPulse { 0%, 100% { opacity: .8; } 50% { opacity: 1; } }
 
+/* 星球下方聚光：像舞台追光，把主角托起来。 */
+.planet-stage::after {
+    content: "";
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 150%; height: 150%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle at 50% 50%, rgba(96,165,250,.14), rgba(87,230,213,.06) 34%, transparent 62%);
+    filter: blur(6px);
+    pointer-events: none;
+    z-index: -1;
+    animation: bloomPulse 8s ease-in-out infinite;
+}
+@keyframes bloomPulse { 0%,100% { opacity: .7; transform: translate(-50%,-50%) scale(1); } 50% { opacity: 1; transform: translate(-50%,-50%) scale(1.06); } }
+
+/* ===== 入场编排：淡入 + 各层依次登场 ===== */
+@keyframes fadeInSlow { from { opacity: 0; } to { opacity: 1; } }
+@keyframes riseIn { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes riseInCenter { from { opacity: 0; transform: translate(-50%, 22px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes slideInLeft { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes slideInRight { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: translateX(0); } }
+
+/* 尊重系统「减少动态效果」：关掉装饰性无限循环动画，保留 3D 星球与面板过渡。 */
+@media (prefers-reduced-motion: reduce) {
+    #stars .star,
+    .galaxy-core, .cosmic-dust, .nebula, .shoot,
+    .aurora, .meteor, .cloud,
+    .planet3d-wrap, .orbiter, .orbiter span, .moon-orb::after,
+    .land-hint, .planet-stage::before, .planet-stage::after, .alert-chip,
+    .scene, .scene-vignette, .scene-grain, .hud-frame,
+    .orbit-rings, .orbit-ring,
+    .hud-tl, .hud-tr, .hero-copy, .quote-line, .dock {
+        animation: none !important;
+    }
+    /* 关掉入场动画后回落到最终静止位（居中、可见）。 */
+    .planet3d-wrap { transform: translate(-50%, -50%); }
+    .hero-copy, .dock { transform: translateX(-50%); }
+    .dock.dock-side { transform: translateY(-50%); }
+    .hud-tl, .hud-tr { transform: none; }
+}
+
 /* ===== 星球舞台 ===== */
 .planet-stage {
     position: absolute;
@@ -144,19 +222,20 @@ body.auth-body { overflow: auto; }
     transform: translate(-50%, -50%);
     transition: opacity .5s, transform .5s;
 }
-.planet-stage::before { content:"";position:absolute;inset:5%;border-radius:50%;background:radial-gradient(circle,rgba(84,151,255,.18),transparent 64%);filter:blur(32px);animation:worldAura 6s ease-in-out infinite; }
+.planet-stage::before { content:"";position:absolute;inset:2%;border-radius:50%;background:radial-gradient(circle,rgba(120,180,255,.24),rgba(87,230,213,.10) 46%,transparent 66%);filter:blur(34px);animation:worldAura 6s ease-in-out infinite; }
 @keyframes worldAura { 50%{transform:scale(1.13);opacity:.55} }
 .planet-stage.warping { opacity: 0; transform: translate(-50%, -50%) scale(.6); }
 
-/* ===== 3D 星球 ===== */
+/* ===== 3D 星球 =====
+   画布 640px 配合 planet3d.js 后拉的相机：星球像素尺寸不变，星环/辉光有了出血边距 */
 .planet3d-wrap {
     position: absolute;
     left: 50%; top: 50%;
-    width: 470px; height: 470px;
+    width: 640px; height: 640px;
     transform: translate(-50%, -50%);
     transition: filter 1.2s;
     animation: planetFloat 7s ease-in-out infinite;
-    filter:drop-shadow(0 0 34px rgba(79,146,255,.23));
+    filter:drop-shadow(0 0 22px rgba(120,200,255,.4)) drop-shadow(0 0 70px rgba(79,146,255,.28));
 }
 @keyframes planetFloat {
     0%, 100% { transform: translate(-50%, -50%); }
@@ -186,23 +265,116 @@ body.auth-body { overflow: auto; }
 @keyframes orbitSpin { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(360deg); } }
 @keyframes orbitSpinRev { from { transform: translateX(-50%) rotate(0); } to { transform: translateX(-50%) rotate(-360deg); } }
 
+/* 轨道小月亮：CSS 绘制的立体月球（替代 emoji），带环形山、明暗晕影与柔和辉光 */
+.moon-orb {
+    position: relative;
+    display: block;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 33% 30%,
+        #ffffff 0%, #e6ecfb 24%, #bcc8e9 52%, #8390ba 78%, #576189 100%);
+    box-shadow:
+        inset -10px -9px 16px rgba(20, 27, 60, .55),
+        inset 3px 4px 8px rgba(255, 255, 255, .55),
+        0 0 16px rgba(203, 223, 255, .6),
+        0 0 44px rgba(146, 178, 255, .32);
+}
+.moon-orb::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 63% 28%, rgba(124, 138, 184, .58) 0 9%, transparent 12%),
+        radial-gradient(circle at 40% 55%, rgba(124, 138, 184, .5) 0 13%, transparent 16%),
+        radial-gradient(circle at 69% 61%, rgba(124, 138, 184, .46) 0 7%, transparent 10%),
+        radial-gradient(circle at 51% 79%, rgba(124, 138, 184, .4) 0 5%, transparent 8%),
+        radial-gradient(circle at 24% 33%, rgba(255, 255, 255, .6) 0 5%, transparent 8%);
+}
+.moon-orb::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    background: radial-gradient(circle, transparent 56%, rgba(188, 213, 255, .22) 68%, transparent 82%);
+    animation: moonHalo 4.2s ease-in-out infinite;
+    pointer-events: none;
+}
+@keyframes moonHalo { 0%, 100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.07); } }
+
 .land-hint {
     position: absolute;
-    left: 50%; bottom: 6%;
+    left: 50%;
+    /* 常规屏幕停在星球正下方；矮窗口时自动上抬，避免压到底部文案（舞台底边距视口底 = 48vh - 330px） */
+    bottom: max(6%, calc(448px - 48vh));
     transform: translateX(-50%);
-    color: var(--dim);
-    font-size: 12px;
-    letter-spacing: 3px;
-    animation: hintBob 2s ease-in-out infinite;
+    color: rgba(200, 214, 255, .72);
+    font-size: 11px;
+    letter-spacing: 4px;
+    animation: hintBob 2.4s ease-in-out infinite, fadeInSlow 1s ease 1.1s both;
     pointer-events: none;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, .8);
+    text-shadow: 0 2px 12px rgba(0, 0, 0, .9);
 }
 
-.hero-copy { position:fixed;left:50%;bottom:103px;transform:translateX(-50%);z-index:5;text-align:center;width:min(760px,80vw);pointer-events:none;text-shadow:0 5px 28px #000; }
-.hero-copy small { display:block;color:#78dcff;letter-spacing:5px;font-size:9px;margin-bottom:8px; }
-.hero-copy strong { display:block;font-size:clamp(17px,2vw,27px);font-weight:500;letter-spacing:3px;background:linear-gradient(100deg,#fff,#a8e7ff,#c8b7ff);-webkit-background-clip:text;background-clip:text;color:transparent; }
-.hero-copy span { display:block;color:rgba(215,225,255,.58);font-size:11px;margin-top:7px;letter-spacing:2px; }
+/* 底部文案：小标题 + 操作提示 + 每日一句合成一个文档流块，天然不会互相重叠 */
+.hero-copy { position:fixed;left:50%;bottom:30px;transform:translateX(-50%);z-index:5;text-align:center;width:min(820px,84vw);pointer-events:none;text-shadow:0 5px 28px #000;animation:riseInCenter 1s ease .5s both; }
+.hero-copy small { display:flex;align-items:center;justify-content:center;gap:14px;color:#8fe3ff;letter-spacing:6px;font-size:9.5px;margin-bottom:12px;font-weight:600; }
+.hero-copy small::before,.hero-copy small::after { content:"";width:34px;height:1px;background:linear-gradient(90deg,transparent,rgba(143,227,255,.7)); }
+.hero-copy small::after { background:linear-gradient(90deg,rgba(143,227,255,.7),transparent); }
+.hero-copy span { display:block;color:rgba(210,222,255,.6);font-size:12px;letter-spacing:3px; }
 @keyframes hintBob { 0%, 100% { transform: translate(-50%, 0); opacity: .7; } 50% { transform: translate(-50%, -6px); opacity: 1; } }
+
+/* ===== 环绕星球的发光轨道环：倾斜成椭圆，一道亮弧缓缓公转 ===== */
+.orbit-rings {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 470px; height: 470px;
+    transform: translate(-50%, -50%) rotateX(74deg);
+    transform-style: preserve-3d;
+    pointer-events: none;
+    z-index: -1;                 /* 沉到星球身后，被星球体自然遮住前缘 */
+    animation: fadeInSlow 1.6s ease .4s both;
+}
+.orbit-ring {
+    position: absolute;
+    left: 50%; top: 50%;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    /* 大部分透明 + 一道亮弧：旋转时像卫星拖着光带公转。 */
+    background: conic-gradient(from 0deg,
+        transparent 0 58%,
+        rgba(120, 210, 255, .0) 58%,
+        rgba(120, 210, 255, .85) 82%,
+        rgba(214, 196, 255, .95) 90%,
+        transparent 100%);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+    filter: drop-shadow(0 0 6px rgba(120, 200, 255, .55));
+}
+.orbit-ring.r1 { width: 118%; height: 118%; animation: orbitPath 14s linear infinite; }
+.orbit-ring.r2 { width: 150%; height: 150%; animation: orbitPath 22s linear infinite reverse; opacity: .8; }
+.orbit-ring.r3 { width: 188%; height: 188%; animation: orbitPath 34s linear infinite; opacity: .6; }
+/* 每道环再叠一圈极淡的完整轨迹线，静止时也能看到"轨道"。 */
+.orbit-ring::after {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(130, 170, 240, .1);
+}
+@keyframes orbitPath { to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+/* ===== 四角取景框：一眼"高级仪表盘/舰桥 HUD" ===== */
+.hud-frame { position: fixed; inset: 16px; z-index: 4; pointer-events: none; animation: fadeInSlow 1.4s ease .7s both; }
+.hud-frame i {
+    position: absolute;
+    width: 30px; height: 30px;
+    border: 1.5px solid rgba(125, 205, 255, .42);
+    filter: drop-shadow(0 0 6px rgba(80, 180, 255, .25));
+}
+.hud-frame .tl { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 8px; }
+.hud-frame .tr { top: 0; right: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 8px; }
+.hud-frame .bl { bottom: 0; left: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 8px; }
+.hud-frame .br { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 8px; }
 
 /* 降落俯冲 */
 .planet-stage.dive { opacity: 0; transform: translate(-50%, -50%) scale(3.2); transition: all .9s cubic-bezier(.5, 0, .9, .4); }
@@ -237,6 +409,49 @@ body.auth-body { overflow: auto; }
 .place-bar{bottom:34px!important;background:rgba(4,13,23,.9)!important;border-radius:8px!important;border-color:#58dfff!important;color:#dff8ff!important;font-family:"SF Mono",monospace;box-shadow:0 0 35px rgba(66,206,255,.22)}
 .place-copy{display:block}.place-cancel{display:none}
 .world-store-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.world-store-grid article{display:grid;grid-template-columns:58px 1fr auto;gap:10px;align-items:center;background:rgba(10,20,44,.45);border:1px solid var(--border);border-radius:12px;padding:12px}.world-store-grid article small{display:block;color:var(--dim);font-size:10px;line-height:1.5;margin-top:3px}.world-store-grid article>strong{color:var(--gold);font:12px "SF Mono"}.world-store-grid article button{grid-column:2/4;justify-self:start}
+
+/* ===== 盖亚改造计划：纪元分组 / 里程碑 / 锁定态 ===== */
+.epoch-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 7px 2px 5px; border-bottom: 1px solid rgba(120, 160, 220, .18); }
+.epoch-head b { font: 11px "SF Mono", monospace; letter-spacing: 2px; color: #7fd8ff; }
+.epoch-head span { font-size: 10.5px; color: var(--dim); }
+.epoch-head.locked b { color: #5d6c85; }
+.epoch-head.compact { margin-top: 6px; padding: 5px 2px 4px; }
+.epoch-head.compact b { font-size: 10px; letter-spacing: 1.5px; }
+.world-store-grid article.ws-keystone { border-color: rgba(255, 214, 120, .45); background: linear-gradient(160deg, rgba(64, 48, 12, .35), rgba(10, 20, 44, .45)); box-shadow: inset 0 0 24px rgba(255, 200, 90, .07); }
+.world-store-grid article.ws-keystone > div > b { color: #ffd88a; }
+.world-store-grid article.ws-locked { opacity: .45; filter: grayscale(.5); }
+.world-store-grid article.ws-owned { opacity: .72; }
+.blueprint.bp-keystone { border-color: rgba(255, 214, 120, .5); background: linear-gradient(160deg, rgba(64, 48, 12, .5), rgba(17, 39, 57, .75)); }
+.blueprint.bp-keystone strong { color: #ffd88a; }
+.blueprint.bp-locked { opacity: .42; filter: grayscale(.6); }
+
+/* 摆件升级/拆除面板（点击自己的建筑弹出） */
+.world-action { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 130; width: min(420px, 90vw); padding: 15px 17px 13px; background: linear-gradient(150deg, rgba(6, 16, 30, .95), rgba(10, 26, 46, .93)); border: 1px solid rgba(104, 196, 255, .4); border-radius: 14px; backdrop-filter: blur(20px); box-shadow: 0 22px 70px rgba(0, 0, 0, .6), inset 0 1px rgba(255, 255, 255, .08); animation: riseInCenter .3s ease both; }
+.world-action header { display: flex; align-items: center; gap: 10px; }
+.world-action header b { font-size: 15px; }
+.world-action .wa-stars i { font-style: normal; color: #3a4a63; font-size: 13px; margin-right: 1px; }
+.world-action .wa-stars i.on { color: #ffd166; text-shadow: 0 0 8px rgba(255, 200, 90, .6); }
+.world-action .wa-keystone { font-size: 11px; color: #ffd88a; letter-spacing: 1px; }
+.world-action p { color: var(--dim); font-size: 11.5px; margin: 7px 0 11px; line-height: 1.55; }
+.world-action .wa-btns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.world-action .wa-btns button { padding: 8px 14px; font-size: 12.5px; border-radius: 9px; }
+.world-action .wa-danger { background: rgba(255, 100, 110, .14); color: #ff8b95; box-shadow: inset 0 0 0 1px rgba(255, 110, 120, .4); }
+.world-action .wa-ghost { background: transparent; color: var(--dim); box-shadow: inset 0 0 0 1px var(--border); }
+.world-action .wa-max { font-size: 12px; color: #ffd88a; }
+
+/* 新物件预览色块 */
+.bp-crater { background: linear-gradient(135deg, #9aa0a8, #565c66) }
+.bp-rover { background: linear-gradient(135deg, #e8edf2, #6f7885) }
+.bp-atmosphere { background: linear-gradient(135deg, #8ff0ff, #1d7fa8) }
+.bp-comet { background: linear-gradient(135deg, #e8f7ff, #4f92ba) }
+.bp-spring { background: linear-gradient(135deg, #8fe8e0, #2a8f88) }
+.bp-soup { background: linear-gradient(135deg, #9df2a8, #2b9c3e) }
+.bp-stroma { background: linear-gradient(135deg, #c9c2ae, #6f6a58) }
+.bp-mushroom { background: linear-gradient(135deg, #b08cff, #4fc4d9) }
+.bp-seedvault { background: linear-gradient(135deg, #b8e6a0, #3c7a44) }
+.bp-ark { background: linear-gradient(135deg, #d8a86a, #6d4a26) }
+.bp-firefly { background: linear-gradient(135deg, #d8ff7a, #5f8a3a) }
+.bp-observatory { background: linear-gradient(135deg, #e2e8f2, #4a5d84) }
 .gesture-console{position:fixed;right:22px;top:104px;z-index:110;display:flex;align-items:center;gap:9px;font-size:9px;color:rgba(194,211,234,.45)}.gesture-console button{padding:7px 11px;background:rgba(3,10,22,.58);border:1px solid rgba(111,179,220,.18);box-shadow:none;color:#92a8c1;font-size:10px}.gesture-console button i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#66758a;margin-right:6px}.gesture-console button.active{color:#75e8ff;border-color:#48d4ff}.gesture-console button.active i{background:#4cf0ce;box-shadow:0 0 8px #4cf0ce}.gesture-console video{position:fixed;right:22px;top:140px;width:130px;height:78px;object-fit:cover;border:1px solid rgba(83,207,241,.3);border-radius:8px;opacity:.22;transform:scaleX(-1);display:none}.gesture-console button.active~video{display:block}.world3d~.gesture-console,.scene:has(.world3d)>.gesture-console{top:18px;right:132px}.scene:has(.world3d)>.gesture-console video{top:56px;right:132px}
 .surface-world {
     position: absolute;
@@ -424,24 +639,26 @@ body.auth-body { overflow: auto; }
     font-size: 14px;
 }
 
-/* ===== HUD ===== */
+/* ===== HUD：高级玻璃拟态 ===== */
 .hud {
     position: absolute;
     z-index: 5;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    backdrop-filter: blur(10px);
-    padding: 14px 18px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 18px;
+    backdrop-filter: blur(22px) saturate(1.5);
+    -webkit-backdrop-filter: blur(22px) saturate(1.5);
+    padding: 15px 19px;
+    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-hi);
 }
-.hud-tl { top: 20px; left: 22px; width: 250px; }
-.hud-tl .p-name { font-size: 16px; font-weight: 800; cursor: pointer; }
+.hud-tl { top: 22px; left: 24px; width: 254px; animation: slideInLeft .8s .35s ease both; }
+.hud-tl .p-name { font-size: 16px; font-weight: 800; cursor: pointer; letter-spacing: .5px; }
 .hud-tl .p-name:hover::after { content: " ✏️"; font-size: 12px; }
 .hud-tl .p-tier { color: var(--dim); font-size: 11.5px; margin-top: 3px; }
 .hud-tl .p-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 12px; color: var(--dim); }
 .hud-tl .p-row b { color: var(--gold); }
 
-.hud-tr { top: 20px; right: 22px; display: flex; gap: 14px; align-items: center; font-size: 12.5px; }
+.hud-tr { top: 22px; right: 24px; display: flex; gap: 14px; align-items: center; font-size: 12.5px; animation: slideInRight .8s .35s ease both; }
 .hud-tr .chip b { font-size: 16px; }
 .hud-tr .chip { text-align: center; color: var(--dim); }
 .hud-tr .chip b.cyan { color: var(--cyan); }
@@ -487,43 +704,50 @@ body.auth-body { overflow: auto; }
 }
 .visit-bar b { color: var(--gold); }
 
-/* 底部：格言 + dock */
+/* 底部：每日一句（位于 .hero-copy 文档流内，跟随文案自然排列） */
 .quote-line {
-    position: absolute;
-    bottom: 92px; left: 50%;
-    transform: translateX(-50%);
-    z-index: 4;
-    color: var(--dim);
+    margin-top: 13px;
+    color: rgba(155, 168, 210, .82);
     font-size: 12.5px;
     font-style: italic;
+    letter-spacing: .5px;
     text-align: center;
-    max-width: 80vw;
     pointer-events: none;
     text-shadow: 0 2px 8px rgba(0, 0, 0, .6);
+    animation: fadeInSlow 1.4s ease .9s both;
 }
 .dock {
     position: absolute;
-    bottom: 24px; left: 50%;
+    bottom: 26px; left: 50%;
     transform: translateX(-50%);
     z-index: 6;
     display: flex;
-    gap: 6px;
-    background: var(--card);
-    border: 1px solid var(--border);
+    gap: 4px;
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
     border-radius: 999px;
-    padding: 8px 12px;
-    backdrop-filter: blur(12px);
+    padding: 7px 10px;
+    backdrop-filter: blur(22px) saturate(1.4);
+    -webkit-backdrop-filter: blur(22px) saturate(1.4);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-hi);
+    animation: riseInCenter .8s cubic-bezier(.2, .9, .3, 1) .55s both, dockPulse 4.5s ease-in-out 1.3s infinite;
+}
+/* 霓虹脉冲：底部 dock 呼吸般泛起青紫光晕。 */
+@keyframes dockPulse {
+    0%, 100% { filter: drop-shadow(0 0 10px rgba(90, 210, 255, .18)); }
+    50% { filter: drop-shadow(0 0 22px rgba(150, 130, 255, .42)); }
 }
 .dock button {
     background: transparent;
     font-size: 20px;
-    padding: 8px 12px;
-    border-radius: 12px;
+    padding: 9px 13px;
+    border-radius: 14px;
     position: relative;
-    transition: transform .15s, background .15s;
+    filter: grayscale(.25);
+    transition: transform .18s cubic-bezier(.2, .9, .3, 1), background .18s, filter .18s;
 }
-.dock button:hover { transform: translateY(-4px) scale(1.15); background: rgba(120, 140, 220, .12); box-shadow: none; }
-.dock button.on { background: rgba(87, 230, 213, .16); }
+.dock button:hover { transform: translateY(-5px) scale(1.16); background: rgba(120, 140, 220, .12); box-shadow: none; filter: grayscale(0); }
+.dock button.on { background: rgba(87, 230, 213, .16); filter: grayscale(0); box-shadow: inset 0 0 0 1px rgba(87, 230, 213, .5), 0 0 18px rgba(87, 230, 213, .28); }
 .dock button .badge {
     position: absolute;
     top: 0; right: 2px;
@@ -537,21 +761,45 @@ body.auth-body { overflow: auto; }
 .dock button::after {
     content: attr(data-tip);
     position: absolute;
-    bottom: 110%;
+    bottom: 128%;
     left: 50%;
-    transform: translateX(-50%);
-    background: var(--card-solid);
-    border: 1px solid var(--border);
+    transform: translateX(-50%) translateY(4px);
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-border);
     color: var(--text);
     font-size: 11px;
-    padding: 3px 10px;
-    border-radius: 8px;
+    letter-spacing: .5px;
+    padding: 5px 12px;
+    border-radius: 9px;
     white-space: nowrap;
     opacity: 0;
     pointer-events: none;
-    transition: opacity .15s;
+    backdrop-filter: blur(14px) saturate(150%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    box-shadow: 0 10px 26px rgba(2, 5, 20, .5);
+    transition: opacity .16s ease, transform .16s ease;
 }
-.dock button:hover::after { opacity: 1; }
+.dock button:hover::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* 主 dock 改为左侧竖排：把底部空间整个让给文案；放左侧是因为右侧会被滑出面板（z-index:100）盖住 */
+.dock.dock-side {
+    left: 18px; right: auto;
+    /* 常规窗口垂直居中；矮窗口下钳住下限，避免顶到左上角星球信息卡（自身高约 387px，居中位移一半） */
+    top: max(50%, 346px); bottom: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 7px;
+    animation: riseInSide .8s cubic-bezier(.2, .9, .3, 1) .55s both, dockPulse 4.5s ease-in-out 1.3s infinite;
+}
+@keyframes riseInSide { from { opacity: 0; transform: translate(-24px, -50%); } to { opacity: 1; transform: translate(0, -50%); } }
+.dock.dock-side button:hover { transform: translateX(5px) scale(1.12); }
+/* 竖排时提示气泡出现在按钮右侧 */
+.dock.dock-side button::after {
+    bottom: auto; left: 128%; right: auto; top: 50%;
+    transform: translateY(-50%) translateX(-6px);
+}
+.dock.dock-side button:hover::after { opacity: 1; transform: translateY(-50%) translateX(0); }
 
 /* 跨星球跃迁：用深空光轨替代 emoji 火箭，避免破坏整体质感。 */
 .warp-transition { position:fixed;inset:0;z-index:9000;overflow:hidden;pointer-events:none;background:radial-gradient(circle at 50% 50%,rgba(202,244,255,.96),rgba(63,155,255,.2) 8%,rgba(4,8,24,.92) 45%,#01030b 100%);animation:warpFade 1.15s ease both; }
@@ -710,6 +958,18 @@ select option { background: var(--card-solid); }
 .tier-step { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--dim); padding: 6px 10px; border-radius: 10px; }
 .tier-step.now { background: rgba(87, 230, 213, .1); border: 1px solid rgba(87, 230, 213, .35); color: var(--text); }
 .tier-step.past { color: var(--text); opacity: .75; }
+/* 进化之路：每级一颗小星球，从小到大呼应星球的成长 */
+.tier-step .tier-orb-box { width: 26px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tier-orb { display: block; border-radius: 50%; box-shadow: inset -2px -2px 4px rgba(4, 8, 24, .5), 0 0 8px rgba(140, 170, 255, .3); }
+.tier-orb.t1 { background: radial-gradient(circle at 32% 30%, #cdd3e6, #8c94ad 55%, #4a5068); }
+.tier-orb.t2 { background: radial-gradient(circle at 32% 30%, #cdb896, #8a7057 55%, #4a3826); }
+.tier-orb.t3 { background: radial-gradient(circle at 32% 30%, #b9c6e4, #5d6d9e 55%, #28355c); }
+.tier-orb.t4 { background: radial-gradient(circle at 32% 30%, #ffb27a, #c4552e 55%, #3c1206); }
+.tier-orb.t5 { background: radial-gradient(circle at 32% 30%, #6edcff, #2e7fd0 55%, #123061); }
+.tier-orb.t6 { background: radial-gradient(circle at 32% 30%, #7bed9f, #2eae70 50%, #145a3d); }
+.tier-orb.t7 { background: radial-gradient(circle at 32% 30%, #c4b5fd, #7c5cd8 55%, #33206e); }
+.tier-orb.t8 { background: radial-gradient(circle at 35% 32%, #fff3c4, #ffd166 45%, #ff8f3d 80%); box-shadow: 0 0 10px rgba(255, 190, 80, .75), inset -2px -2px 4px rgba(120, 40, 0, .4); }
+.tier-step:not(.past):not(.now) .tier-orb { filter: grayscale(.7) brightness(.62); }
 
 /* 番茄钟环 */
 .pomodoro { text-align: center; padding: 14px 10px 20px; }
@@ -877,8 +1137,18 @@ textarea { width: 100%; min-height: 100px; resize: vertical; }
     .duo { grid-template-columns: 1fr; }
     .quote-line { display: none; }
     .hero-copy { bottom:92px;width:88vw; }
-    .hero-copy strong { font-size:16px;letter-spacing:1px; }
     .hero-copy span { font-size:9px;letter-spacing:1px; }
+    /* 手机屏太窄，竖排 dock 会遮星球：退回底部横排 */
+    .dock.dock-side {
+        left:50%; right:auto;
+        top:auto; bottom:20px;
+        transform:translateX(-50%);
+        flex-direction:row;
+        gap:4px;
+        padding:7px 10px;
+        animation: riseInCenter .8s cubic-bezier(.2, .9, .3, 1) .55s both, dockPulse 4.5s ease-in-out 1.3s infinite;
+    }
+    .dock.dock-side button:hover { transform: translateY(-5px) scale(1.16); }
     .gesture-console,.scene:has(.world3d)>.gesture-console { right:108px;top:14px; }
     .gesture-console>span { display:none; }
     .gesture-console video,.scene:has(.world3d)>.gesture-console video { right:108px;top:52px;width:104px;height:62px; }
