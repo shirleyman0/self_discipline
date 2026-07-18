@@ -13,6 +13,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByUsername(String username);
 
+    boolean existsByEmailIgnoreCase(String email);
+
     Optional<User> findByInviteCode(String inviteCode);
 
     /** 积分/XP 写操作统一锁住用户行，避免奖励、惩罚、兑换与建造并发覆盖。 */

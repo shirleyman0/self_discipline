@@ -372,9 +372,17 @@ addHead('风格 D · Three.js 真 3D 星球', '实时渲染 · 程序化地形 �
     planet3D(d.querySelector('.box'), t, ONLY_D ? 340 : 280);
 });
 
-/* ============ 全部 8 个进化阶段（正式版 planet3d.js 模块渲染） ============ */
+/* ============ 主页正式版 · 7 个纪元外观（首页实际渲染来源） ============ */
+const EPOCH_NAMES = ['洪荒纪', '大气纪', '海洋纪', '生命纪', '绿色纪', '动物纪', '文明纪'];
+addHead('主页正式版 · 7 个纪元外观', '首页星球的真实来源：建成里程碑解锁下一纪元（planet3d.js setEpoch）');
+EPOCH_NAMES.forEach((name, i) => {
+    const d = addCell('', 'EPOCH ' + i + ' · ' + name);
+    Planet3D.mount(d.querySelector('.box'), { size: 280, epoch: i });
+});
+
+/* ============ 视觉库 · 8 个 tier（PK 段位 / 备用外观，非首页主线） ============ */
 const ALL_TIERS = ['星尘', '陨石', '小行星', '岩浆行星', '海洋行星', '翠绿行星', '文明行星', '恒星'];
-addHead('主页正式版 · 8 个进化阶段', '与主页完全一致的渲染（planet3d.js）');
+addHead('视觉库 · 8 个 tier', 'PK 段位小星球与备用外观（planet3d.js setTier）');
 ALL_TIERS.forEach((name, i) => {
     const d = addCell('', 'T' + (i + 1) + ' · ' + name);
     Planet3D.mount(d.querySelector('.box'), { size: 280, tier: i + 1 });

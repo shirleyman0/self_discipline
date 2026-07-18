@@ -14,7 +14,7 @@
 
 ## 本地运行
 
-前置：**JDK 17**，本地 MySQL 已启动（账号密码以 `application.yml` 或环境变量为准，首次启动自动建 `discipline` 库）。
+前置：**JDK 17**，本地 MySQL 已启动（账号密码以 `application.yml` 或环境变量为准，首次启动自动建 `discipline` 库）。注册验证码通过 Resend 邮件 API 发送。
 
 ```bash
 # macOS 如果同时安装了多个 JDK，先明确切到 17
@@ -40,8 +40,14 @@ mvn package && java -jar target/self-discipline-0.0.1-SNAPSHOT.jar
 数据库连接不同时用环境变量覆盖：
 
 ```bash
-DB_USER=root DB_PASSWORD=你的密码 mvn spring-boot:run
+DB_USER=root DB_PASSWORD=你的密码 \
+RESEND_API_KEY=re_你的Resend密钥 MAIL_FROM='自律星球 <onboarding@resend.dev>' \
+mvn spring-boot:run
 ```
+
+在 [Resend](https://resend.com) 创建 API Key 后填入 `RESEND_API_KEY`，不再需要邮箱密码或 SMTP 授权码。测试阶段可以使用 `onboarding@resend.dev`，但通常只能发给 Resend 账号自己的邮箱；向其他用户发信前，需要在 Resend 验证自己的域名，并把 `MAIL_FROM` 改为该域名下的邮箱。
+
+注册流程：输入邮箱 → 点击「获取验证码」→ 填写邮件中的 6 位验证码 → 提交注册。验证码 10 分钟有效，同一邮箱 60 秒内不能重复发送，连续输错 5 次后失效。
 
 ## 玩法规则
 
@@ -62,12 +68,14 @@ DB_USER=root DB_PASSWORD=你的密码 mvn spring-boot:run
 ```bash
 mvn package
 JWT_SECRET=换成随机长字符串 DB_URL=jdbc:mysql://服务器:3306/discipline?... DB_USER=... DB_PASSWORD=... \
+RESEND_API_KEY=re_你的Resend密钥 MAIL_FROM='自律星球 <noreply@你的域名>' \
   java -jar target/self-discipline-0.0.1-SNAPSHOT.jar
 ```
 
 ## API 一览
 
-- `POST /api/auth/register` / `POST /api/auth/login`
+- `POST /api/auth/send-code`（发送注册邮箱验证码）
+- `POST /api/auth/register`（邮箱验证码校验通过后注册）/ `POST /api/auth/login`
 - `GET/POST/PUT/DELETE /api/habits`，`POST /api/habits/{id}/checkin`，`GET /api/habits/{id}/heatmap?year=`
 - `GET/POST/PUT/DELETE /api/tasks`，`GET /api/tasks/today`，`POST /api/tasks/{id}/complete`
 - `POST /api/focus`，`GET /api/focus/today`

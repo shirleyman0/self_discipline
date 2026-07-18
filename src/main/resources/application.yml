@@ -13,7 +13,6 @@ spring:
         format_sql: true
   jackson:
     time-zone: Asia/Shanghai
-
 server:
   port: ${SERVER_PORT:8080}
 
@@ -22,6 +21,12 @@ app:
     # 部署到服务器时务必用环境变量 JWT_SECRET 覆盖（至少 32 字节）
     secret: ${JWT_SECRET:self-discipline-dev-secret-key-please-override-in-prod}
     expire-hours: ${JWT_EXPIRE_HOURS:720}
+  mail:
+    # Resend 测试发件地址；正式环境请换成已验证域名下的邮箱。
+    from: ${MAIL_FROM:自律星球 <onboarding@resend.dev>}
+  resend:
+    api-key: ${RESEND_API_KEY:}
+    base-url: ${RESEND_BASE_URL:https://api.resend.com}
 
 logging:
   level:

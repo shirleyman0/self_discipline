@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
@@ -17,25 +18,47 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final EmailVerificationService emailVerificationService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+                       EmailVerificationService emailVerificationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.emailVerificationService = emailVerificationService;
     }
 
     @Transactional
-    public Map<String, Object> register(String username, String password, String nickname) {
+    public Map<String, Object> register(String username, String password, String email, String verificationCode,
+                                        String nickname) {
+        email = normalizeEmail(email);
         if (userRepository.existsByUsername(username)) {
             throw ApiException.conflict("用户名已存在");
         }
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw ApiException.conflict("邮箱已被注册");
+        }
+        emailVerificationService.verifyAndConsume(email, verificationCode);
         User user = new User();
         user.setUsername(username);
+        user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setNickname(nickname == null || nickname.isBlank() ? username : nickname);
         user.setInviteCode(generateInviteCode());
         userRepository.save(user);
         return tokenResponse(user);
+    }
+
+    public void sendVerificationCode(String email) {
+        email = normalizeEmail(email);
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw ApiException.conflict("邮箱已被注册");
+        }
+        emailVerificationService.sendCode(email);
+    }
+
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     /** 6 位搭档邀请码（去掉易混淆字符） */
@@ -65,11 +88,13 @@ public class AuthService {
     }
 
     private Map<String, Object> tokenResponse(User user) {
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put("id", user.getId());
+        userInfo.put("username", user.getUsername());
+        userInfo.put("nickname", user.getNickname());
+        if (user.getEmail() != null) userInfo.put("email", user.getEmail());
         return Map.of(
                 "token", jwtUtil.generate(user.getId(), user.getUsername()),
-                "user", Map.of(
-                        "id", user.getId(),
-                        "username", user.getUsername(),
-                        "nickname", user.getNickname()));
+                "user", userInfo);
     }
 }

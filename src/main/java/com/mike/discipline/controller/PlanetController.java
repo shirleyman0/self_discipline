@@ -25,6 +25,9 @@ public class PlanetController {
     public record RenameRequest(@NotBlank @Size(max = 30) String name) {
     }
 
+    public record ResidentNameRequest(@NotBlank @Size(max = 20) String name) {
+    }
+
     public record MessageRequest(@NotBlank @Size(max = 200) String content,
                                  @Size(max = 10) String gift) {
     }
@@ -62,6 +65,11 @@ public class PlanetController {
     @PutMapping("/name")
     public void rename(@RequestBody @Valid RenameRequest req) {
         planetService.rename(CurrentUser.id(), req.name());
+    }
+
+    @PutMapping("/resident/name")
+    public void renameResident(@RequestBody @Valid ResidentNameRequest req) {
+        planetService.renameResident(CurrentUser.id(), req.name());
     }
 
     /** 在搭档星球留言 */

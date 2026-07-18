@@ -1,6 +1,7 @@
 // ===== Planet3D：Three.js 实时 3D 星球渲染模块 =====
-// 用法：const h = Planet3D.mount(el, { size, tier, onClick });
-//       h.setTier(n) 切换进化阶段；h.destroy() 销毁。
+// 用法：const h = Planet3D.mount(el, { size, epoch, onClick });
+//       h.setEpoch(n) 按纪元(0..7)切换星球外观（主页正式用法）；
+//       h.setTier(n) 按视觉库(1..8)切换（试衣间/PK 段位用）；h.destroy() 销毁。
 (function () {
     'use strict';
 
@@ -67,6 +68,49 @@
             bands: [[.4, '#e06a10'], [.5, '#f59a22'], [.6, '#ffc04d'], [.72, '#ffe08a'], [1, '#fff7d6']],
             glow: 0xffd166, scale: 2.6, star: true, seed: 55, size: 1.10,
             craters: { count: 6, dark: true, k: 1.9 }
+        }
+    };
+
+    /* ---------- 纪元视觉配置 ----------
+     * 与「盖亚改造计划」的 7 个纪元(0..6)一一对应，是首页星球的实际外观来源。
+     * 每建成一座里程碑工程解锁下一纪元，星球外观随之整体改变——星尘→岩壳→
+     * 起海→现绿→葱茏→戴环→灯火，让「首页看到的星球」与「降落后的世界」讲同一个故事。
+     * 复用与 TIERS 相同的渲染开关(bands/glow/sea/caps/clouds/ring/lights/craters/dust)，
+     * 只为「有海无绿的荒芜海洋」和「初现藻绿的生命纪」新配了两组过渡色带。 */
+    const EPOCH_CONF = {
+        0: { // 洪荒纪：保留原版第一颗「星尘」——灰蓝幼年星核、稀薄大气与完整星尘带
+            bands: [[.5, '#6f7690'], [.6, '#8c94ad'], [.7, '#a5adc4'], [1, '#c2c9dd']],
+            glow: 0xaab4d8, scale: 2.2, dust: true, atmoLoose: true, seed: 17, size: .72
+        },
+        1: { // 大气纪：荒岩未变，天空第一次泛起蓝色，薄云与大气辉光初现
+            bands: [[.42, '#4a4034'], [.55, '#6a5b47'], [.68, '#8a7860'], [.82, '#a8977c'], [1, '#c3b499']],
+            glow: 0x6fb4e6, scale: 3.0, seed: 23, size: .88,
+            craters: { count: 18 }, clouds: true, atmoLoose: true
+        },
+        2: { // 海洋纪：深海—浅海铺满星球，陆地仍是荒芜的岩棕，尚无生命
+            bands: [[.48, '#0a2f66'], [.55, '#0f4d9a'], [.61, '#1f74cf'], [.64, '#3ec2d8'], [.67, '#cdbb92'], [.8, '#a1876a'], [1, '#836c53']],
+            glow: 0x6edcff, scale: 2.2, sea: .64, caps: true, clouds: true, spec: true, seed: 7, size: .96
+        },
+        3: { // 生命纪：水边泛起第一抹藻绿，陆地边缘开始转绿，仍以荒棕为主
+            bands: [[.47, '#0a2f66'], [.54, '#0f4d9a'], [.60, '#1f74cf'], [.63, '#3ec2d8'], [.66, '#d8c79a'], [.72, '#8f9a5e'], [.86, '#9c8a68'], [1, '#7d6b52']],
+            glow: 0x8fe6c0, scale: 2.1, sea: .62, caps: true, clouds: true, spec: true, seed: 7, size: .98
+        },
+        4: { // 绿色纪：草原与森林蔓延全球，葱茏大陆 + 冰蓝浅滩
+            bands: [[.42, '#0d3a67'], [.49, '#1c64b2'], [.545, '#2f8ad4'], [.575, '#46c8d4'], [.60, '#e6d9a8'], [.68, '#52cc84'], [.82, '#35a463'], [1, '#27824c']],
+            glow: 0x7bed9f, scale: 2.1, sea: .58, caps: true, clouds: true, spec: true, seed: 3, size: 1.0
+        },
+        5: { // 动物纪：生机盎然的翠绿行星，戴上象征万物繁盛的星环
+            bands: [[.42, '#0d3a67'], [.49, '#1c64b2'], [.545, '#2f8ad4'], [.575, '#46c8d4'], [.60, '#e6d9a8'], [.68, '#52cc84'], [.82, '#35a463'], [1, '#27824c']],
+            glow: 0x7bed9f, scale: 2.1, sea: .58, caps: true, clouds: true, spec: true, ring: true, seed: 3, size: 1.03
+        },
+        6: { // 文明纪：星环 + 暗面万家灯火，属于坚持者的星球
+            bands: [[.44, '#0c3560'], [.52, '#1a5ea6'], [.56, '#2f8ad4'], [.60, '#46c8d4'], [.63, '#e6d9a8'], [.7, '#4dc47e'], [.84, '#2f955a'], [1, '#237a48']],
+            glow: 0x8ff0c8, scale: 2.1, sea: .58, caps: true, clouds: true, spec: true, ring: true, lights: true, seed: 3, size: 1.06
+        },
+        7: { // 恒星纪：文明行星自身成为柔和光源，向邻星发出可见航路
+            bands: [[.43, '#13425f'], [.51, '#2377a3'], [.58, '#4ec5c8'], [.63, '#efe0a6'], [.72, '#70d29a'], [.86, '#44a96d'], [1, '#2d7458']],
+            glow: 0xffd166, scale: 2.15, sea: .58, caps: true, clouds: true,
+            ring: true, lights: true, star: true, seed: 13, size: 1.09
         }
     };
 
@@ -221,6 +265,12 @@
 
     /* ---------- 场景构建 ---------- */
     function mount(el, opts) {
+        let currentState = {
+            epoch: opts.epoch != null ? opts.epoch : 0,
+            companion: opts.companion || null,
+            coBuilds: opts.coBuilds || [],
+            radiance: opts.radiance || {}
+        };
         const size = opts.size || 470;
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(size, size);
@@ -240,6 +290,7 @@
 
         let group = null;        // 当前 tier 的所有对象
         let planetMesh = null, cloudMesh = null, dustPoints = null, coronaSprite = null;
+        let companionRig = null, sharedRig = null, stellarRig = null;
         let destroyed = false;
 
         function clearGroup() {
@@ -254,12 +305,142 @@
                     });
                 }
             });
-            group = planetMesh = cloudMesh = dustPoints = coronaSprite = null;
+            group = planetMesh = cloudMesh = dustPoints = coronaSprite = companionRig = sharedRig = stellarRig = null;
         }
 
-        function build(tier) {
+        function mesh(geometry, color, materialOpts = {}) {
+            return new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+                color, roughness: .72, metalness: .04, ...materialOpts
+            }));
+        }
+
+        function addCompanion(state) {
+            if (!state.companion) return;
+            const stage = Math.max(0, Math.min(6, Number(state.companion.stage) || 0));
+            const mood = String(state.companion.mood || 'CALM');
+            const scared = mood === 'SCARED';
+            companionRig = new THREE.Group();
+            companionRig.userData.mood = mood;
+            companionRig.position.set(2.18, -1.18, .72);
+            const scale = .64 + stage * .035;
+            companionRig.scale.setScalar(scale);
+            group.add(companionRig);
+
+            if (stage === 0) {
+                const spore = mesh(new THREE.SphereGeometry(.34, 24, 18), scared ? 0x817767 : 0xa79879,
+                    { emissive: scared ? 0x17110d : 0x2a2117, emissiveIntensity: .22 });
+                spore.scale.y = .82;
+                companionRig.add(spore);
+                for (let i = 0; i < 4; i++) {
+                    const dot = mesh(new THREE.SphereGeometry(.045, 10, 8), 0xd8c696,
+                        { emissive: 0x816c34, emissiveIntensity: .8 });
+                    dot.position.set((i - 1.5) * .11, .08 + (i % 2) * .09, .31);
+                    companionRig.add(dot);
+                }
+                return;
+            }
+
+            const bodyColor = scared ? 0x6f8e80 : stage >= 4 ? 0x72cfa0 : stage >= 2 ? 0x69c7c7 : 0x91c8ae;
+            const body = mesh(new THREE.SphereGeometry(.34, 24, 18), bodyColor,
+                { emissive: mood === 'ECSTATIC' ? 0x23664d : 0x112c26, emissiveIntensity: mood === 'ECSTATIC' ? .55 : .18 });
+            body.scale.set(.92, scared ? .72 : 1.05, .88);
+            body.position.y = scared ? -.08 : 0;
+            companionRig.add(body);
+            const head = mesh(new THREE.SphereGeometry(.28, 24, 18), bodyColor);
+            head.position.set(0, scared ? .18 : .36, .02);
+            companionRig.add(head);
+            for (const side of [-1, 1]) {
+                const ear = mesh(new THREE.ConeGeometry(.13, .34, 14), stage >= 4 ? 0x5dbb7d : bodyColor);
+                ear.position.set(side * .19, scared ? .34 : .58, -.01);
+                ear.rotation.z = side * -.38;
+                companionRig.add(ear);
+                const eye = mesh(new THREE.SphereGeometry(.045, 12, 8), 0x163744,
+                    { emissive: 0x163744, emissiveIntensity: .25 });
+                eye.position.set(side * .1, scared ? .23 : .4, .255);
+                eye.scale.y = scared ? .38 : 1;
+                companionRig.add(eye);
+            }
+            if (stage >= 2) {
+                for (const side of [-1, 1]) {
+                    const fin = mesh(new THREE.ConeGeometry(.1, .32, 12), 0x78d6cc);
+                    fin.position.set(side * .34, -.03, 0);
+                    fin.rotation.z = side * Math.PI / 2;
+                    companionRig.add(fin);
+                }
+            }
+            if (stage >= 4) {
+                const tail = mesh(new THREE.TorusGeometry(.24, .055, 10, 24, Math.PI * 1.45), 0x70cb83);
+                tail.position.set(-.26, -.05, -.18);
+                tail.rotation.set(.5, .5, -.7);
+                companionRig.add(tail);
+            }
+            if (stage >= 6) {
+                const halo = mesh(new THREE.TorusGeometry(.25, .022, 8, 32), 0xffd166,
+                    { emissive: 0xffb842, emissiveIntensity: 1.5 });
+                halo.position.y = .82;
+                halo.rotation.x = Math.PI / 2;
+                companionRig.add(halo);
+            }
+            const light = new THREE.PointLight(mood === 'SCARED' ? 0xe3a46e : 0x78e5bd, .8, 3.2);
+            light.position.set(0, .3, .5);
+            companionRig.add(light);
+        }
+
+        function addSharedBuilds(state) {
+            const gifts = (state.coBuilds || []).slice(-8);
+            if (!gifts.length) return;
+            sharedRig = new THREE.Group();
+            group.add(sharedRig);
+            gifts.forEach((gift, index) => {
+                const marker = new THREE.Group();
+                const angle = index / gifts.length * Math.PI * 2 + .5;
+                const radius = 2.35 + (index % 2) * .2;
+                marker.position.set(Math.cos(angle) * radius, Math.sin(angle) * 1.28, .24);
+                marker.scale.setScalar(.23);
+                if (gift.code === 'TREE') {
+                    const trunk = mesh(new THREE.CylinderGeometry(.13, .17, .72, 10), 0x7a5338);
+                    trunk.position.y = -.1;
+                    marker.add(trunk);
+                    const crown = mesh(new THREE.ConeGeometry(.52, 1.15, 14), 0x52bd78,
+                        { emissive: 0x174b31, emissiveIntensity: .2 });
+                    crown.position.y = .68;
+                    marker.add(crown);
+                } else {
+                    const post = mesh(new THREE.CylinderGeometry(.07, .08, .92, 10), 0x59463c);
+                    marker.add(post);
+                    const lamp = mesh(new THREE.BoxGeometry(.5, .48, .5), 0xffd28a,
+                        { emissive: 0xffa23d, emissiveIntensity: 1.4, transparent: true, opacity: .92 });
+                    lamp.position.y = .62;
+                    marker.add(lamp);
+                    marker.add(new THREE.PointLight(0xffb45e, .9, 3));
+                }
+                sharedRig.add(marker);
+            });
+        }
+
+        function addStellarLink(state) {
+            if (!state.radiance || !state.radiance.active) return;
+            stellarRig = new THREE.Group();
+            group.add(stellarRig);
+            const beacon = mesh(new THREE.SphereGeometry(.065, 14, 10), 0xffe09a,
+                { emissive: 0xffb84f, emissiveIntensity: 2 });
+            beacon.position.set(-2.65, 1.72, .1);
+            stellarRig.add(beacon);
+            stellarRig.add(new THREE.PointLight(0xffce78, 1.2, 4));
+            if (state.radiance.partnerConnected) {
+                const partner = mesh(new THREE.SphereGeometry(.15, 18, 12), 0x74d8c5,
+                    { emissive: 0x2d8d83, emissiveIntensity: 1.2 });
+                partner.position.set(-3.18, 1.98, .08);
+                stellarRig.add(partner);
+                const points = [new THREE.Vector3(-1.55, .75, .05), partner.position.clone()];
+                stellarRig.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),
+                    new THREE.LineBasicMaterial({ color: 0xffd889, transparent: true, opacity: .72 })));
+            }
+        }
+
+        function build(conf) {
             clearGroup();
-            const conf = TIERS[tier] || TIERS[1];
+            conf = conf || EPOCH_CONF[0];
             group = new THREE.Group();
             scene.add(group);
             // 星球本体（球体/云层/大气/星环/日冕）挂在 body 上，随进化阶段从小长大
@@ -363,9 +544,13 @@
                 coronaSprite.scale.setScalar(6.2);
                 body.add(coronaSprite);
             }
+            addCompanion(currentState);
+            addSharedBuilds(currentState);
+            addStellarLink(currentState);
         }
 
-        build(opts.tier || 1);
+        // 首页按纪元(0..6)渲染；预览页仍按 tier(1..8)。epoch 为 0 也要生效，故显式判空。
+        build(opts.epoch != null ? (EPOCH_CONF[opts.epoch] || EPOCH_CONF[0]) : (TIERS[opts.tier] || TIERS[1]));
 
         // 拖动旋转 + 点击（位移 < 6px 判定为点击）
         let vx = .0035, dragging = false, lx = 0, downX = 0, downY = 0, moved = 0;
@@ -401,11 +586,27 @@
             if (cloudMesh) cloudMesh.rotation.y += vx * 1.35;
             if (dustPoints) dustPoints.rotation.y += .0012;
             if (coronaSprite) coronaSprite.scale.setScalar(6.2 + Math.sin(t * 1.8) * .35);
+            if (companionRig) {
+                const scared = companionRig.userData.mood === 'SCARED';
+                companionRig.position.y = -1.18 + (scared ? Math.sin(t * 31) * .018 : Math.sin(t * 2.7) * .08);
+                companionRig.rotation.z = scared ? Math.sin(t * 28) * .035 : Math.sin(t * 1.4) * .035;
+            }
+            if (sharedRig) sharedRig.rotation.z += .0007;
+            if (stellarRig) stellarRig.rotation.z = Math.sin(t * .45) * .04;
             renderer.render(scene, camera);
         })();
 
         return {
-            setTier(tier) { build(tier); },
+            setTier(tier) { build(TIERS[tier] || TIERS[1]); },
+            /** 首页按纪元切换外观；epoch 为 0 是合法值，用 || 兜底到洪荒纪即可。 */
+            setEpoch(epoch) {
+                currentState.epoch = epoch;
+                build(EPOCH_CONF[epoch] || EPOCH_CONF[0]);
+            },
+            setState(state = {}) {
+                currentState = { ...currentState, ...state };
+                build(EPOCH_CONF[currentState.epoch] || EPOCH_CONF[0]);
+            },
             /** 手势横滑时给星球一个惯性旋转速度。 */
             rotateBy(delta) {
                 vx = Math.max(-.045, Math.min(.045, vx + Number(delta || 0) * .08));
