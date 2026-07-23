@@ -32,6 +32,23 @@
         <span>INTERSTELLAR TRANSFER</span>
     </div>
 
+    <!-- 序章:星球起源。首次进入播放一次,之后可从编年史重读。正典见 docs/WORLDVIEW.md -->
+    <div class="prologue" v-if="prologue">
+        <button class="prologue-skip" @click="closePrologue">跳过序章 ✕</button>
+        <div class="prologue-card" :key="prologueStep">
+            <small>PROLOGUE · {{ prologueStep + 1 }} / {{ prologueBeats.length }}</small>
+            <span class="prologue-icon">{{ prologueBeat.icon }}</span>
+            <h2>{{ prologueBeat.title }}</h2>
+            <p v-for="(line, i) in prologueBeat.lines" :key="i">{{ line }}</p>
+            <div class="prologue-dots">
+                <i v-for="(b, i) in prologueBeats" :key="i" :class="{on: i <= prologueStep}"></i>
+            </div>
+            <button class="prologue-next" @click="advancePrologue">
+                {{ prologueStep < prologueBeats.length - 1 ? '继续' : '✦ 开始第一次心跳' }}
+            </button>
+        </div>
+    </div>
+
     <!-- ==================== 星球场景 ==================== -->
     <div class="scene" :class="[skyClass, 'health-' + sceneHealth]" v-if="scenePlanet"
          @mousemove="sceneParallax">
@@ -413,7 +430,9 @@
                     </div>
 
                     <div class="card chronicle-card">
-                        <h3>⌁ 星球编年史</h3>
+                        <h3>⌁ 星球编年史
+                            <button class="btn-sm btn-ghost" @click="replayPrologue">✦ 重读序章</button>
+                        </h3>
                         <p class="muted" v-if="!myChronicle.length">第一件大事正在发生。</p>
                         <div class="chronicle" v-if="myChronicle.length">
                             <article v-for="event in myChronicle" :key="event.at + event.title" :class="'event-' + event.type.toLowerCase()">

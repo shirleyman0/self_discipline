@@ -191,6 +191,45 @@ class PlanetServiceTest {
         verify(messageRepository, never()).save(any());
     }
 
+    @Test
+    void stellarEraResidentShowsLanternSpiritFormWithoutBreakingStage() {
+        // 方舟解锁文明纪,天文台点亮恒星纪(displayEpoch=7),星灵应显示恒星纪形态。
+        User user = user(1L, 0);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(worldObjectRepository.findByUserIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(
+                worldObject(9L, WorldItem.ARK, -100.0, -100.0),
+                worldObject(10L, WorldItem.OBSERVATORY, 60.0, 60.0)));
+
+        var planet = planetService.myPlanet(1L);
+
+        assertEquals(7, planet.get("displayEpoch"));
+        @SuppressWarnings("unchecked")
+        var resident = (java.util.Map<String, Object>) planet.get("resident");
+        assertEquals("执灯星灵", resident.get("form"));
+        // stage 仍按 0..6 输出,前端 spirit-portrait / 3D 星灵造型不受影响。
+        assertEquals(6, resident.get("stage"));
+    }
+
+    @Test
+    void desertRegressionHidesStellarFormUntilRecovery() {
+        // 恒星纪星球荒漠化暂退时,星灵回落为暂退纪元的形态,而不是执灯星灵。
+        User user = user(1L, 0);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(worldObjectRepository.findByUserIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(
+                worldObject(9L, WorldItem.ARK, -100.0, -100.0),
+                worldObject(10L, WorldItem.OBSERVATORY, 60.0, 60.0)));
+        when(pointLogRepository.findByUserIdAndCreatedAtBetween(any(), any(), any()))
+                .thenReturn(List.of(punish(0), punish(1), punish(2), punish(3)));
+
+        var planet = planetService.myPlanet(1L);
+
+        // failStreak=4 → 暂退 1 纪元:6(文明纪) → 5(动物纪)。
+        assertEquals(5, planet.get("displayEpoch"));
+        @SuppressWarnings("unchecked")
+        var resident = (java.util.Map<String, Object>) planet.get("resident");
+        assertEquals("星野伙伴", resident.get("form"));
+    }
+
     private User user(Long id, long points) {
         User user = new User();
         user.setId(id);

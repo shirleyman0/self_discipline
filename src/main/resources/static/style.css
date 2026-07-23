@@ -1297,3 +1297,25 @@ textarea { width: 100%; min-height: 100px; resize: vertical; }
     .desktop-controls { display:none; }
     .touch-controls { display:inline; }
 }
+
+/* ===== 序章:星球起源(首次进入播放,编年史可重读) ===== */
+.prologue { position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(circle at 50% 36%,rgba(26,42,88,.88),rgba(2,5,16,.97) 70%);backdrop-filter:blur(14px);animation:fadeInSlow .6s ease both; }
+.prologue-skip { position:absolute;top:22px;right:26px;padding:7px 13px;background:transparent;border:1px solid rgba(139,148,198,.35);border-radius:8px;color:#8b94c6;font-size:11px;letter-spacing:2px;box-shadow:none; }
+.prologue-skip:hover { color:#dfe7ff;border-color:rgba(139,148,198,.7);transform:none; }
+.prologue-card { width:min(560px,92vw);text-align:center;padding:44px 38px 34px;background:linear-gradient(160deg,rgba(16,24,58,.92),rgba(8,13,34,.94));border:1px solid rgba(120,140,220,.28);border-radius:18px;box-shadow:0 30px 90px rgba(0,0,0,.6),inset 0 1px rgba(255,255,255,.07);animation:prologueRise .55s cubic-bezier(.2,.9,.3,1) both; }
+.prologue-card small { display:block;font:9.5px "SF Mono",Menlo,monospace;letter-spacing:5px;color:#78c9b6;margin-bottom:18px; }
+.prologue-icon { display:block;font-size:44px;line-height:1;margin-bottom:14px;filter:drop-shadow(0 0 18px rgba(87,230,213,.45)); }
+.prologue-card h2 { font-size:22px;letter-spacing:6px;color:#eef3ff;margin-bottom:16px; }
+.prologue-card p { color:rgba(214,224,255,.82);font-size:13.5px;line-height:2;max-width:440px;margin:0 auto 10px; }
+.prologue-dots { display:flex;justify-content:center;gap:9px;margin:22px 0 20px; }
+.prologue-dots i { width:7px;height:7px;border-radius:50%;background:rgba(120,140,220,.25);transition:all .3s; }
+.prologue-dots i.on { background:#57e6d5;box-shadow:0 0 8px rgba(87,230,213,.8); }
+.prologue-next { min-width:200px;padding:11px 26px;font-size:13px;letter-spacing:2px; }
+@keyframes prologueRise { from { opacity:0;transform:translateY(26px) scale(.97); } to { opacity:1;transform:none; } }
+@media (max-width:760px) {
+    .prologue { padding:16px; }
+    .prologue-card { padding:30px 20px 24px; }
+    .prologue-card h2 { font-size:19px;letter-spacing:3px; }
+    .prologue-card p { font-size:12.5px;line-height:1.9; }
+    .prologue-skip { top:14px;right:14px; }
+}

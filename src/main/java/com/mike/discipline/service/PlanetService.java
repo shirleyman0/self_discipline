@@ -402,7 +402,7 @@ public class PlanetService {
                 "recentProductiveDays", health.recentProductiveDays(),
                 "reviewedToday", health.reviewedToday(),
                 "regression", regression));
-        m.put("resident", resident(user, userId, effectiveEpoch, health));
+        m.put("resident", resident(user, userId, effectiveEpoch, displayEpoch >= 7, health));
         m.put("starfield", starfield);
         List<Map<String, Object>> coBuilds = sharedBuilds(userId);
         m.put("coBuilds", coBuilds);
@@ -571,7 +571,12 @@ public class PlanetService {
         return Math.max(0, unlockedEpoch - regressionFor(failStreak));
     }
 
-    private Map<String, Object> resident(User user, Long userId, int epoch, HealthSnapshot health) {
+    /**
+     * 星灵:随纪元成长的星球居民。恒星纪(stellar,且未因荒漠化暂退)时形态变为
+     * 「执灯星灵」——灯芯是玩家全部的坚持;stage 仍按 0..6 输出,前端造型不受影响。
+     */
+    private Map<String, Object> resident(User user, Long userId, int epoch,
+                                         boolean stellar, HealthSnapshot health) {
         List<LocalDate> days = checkinRepository.findByUserId(userId).stream()
                 .map(HabitCheckin::getCheckinDate).distinct().sorted().toList();
         int streak = currentStreak(days);
@@ -586,12 +591,16 @@ public class PlanetService {
             case "WORRIED" -> "云压得有点低，但你回来，我就不怕。";
             case "ECSTATIC" -> "连续 " + streak + " 天！我每天都在等这颗星球的心跳。";
             case "HAPPY" -> "今天的星球亮了一下，我知道是你回来了。";
-            default -> "我会守在这里，等你今天种下第一点能量。";
+            default -> stellar
+                    ? "灯我一直提着。今天也去点亮一点什么吧，很远的星星都看得见。"
+                    : "我会守在这里，等你今天种下第一点能量。";
         };
         String name = user.getResidentName() == null || user.getResidentName().isBlank()
                 ? "星灵" : user.getResidentName();
-        return Map.of("name", name, "form", forms[Math.max(0, Math.min(6, epoch))],
-                "stage", epoch, "mood", mood, "streak", streak, "message", message);
+        String form = stellar ? "执灯星灵" : forms[Math.max(0, Math.min(6, epoch))];
+        return Map.of("name", name, "form", form,
+                "stage", Math.max(0, Math.min(6, epoch)), "mood", mood,
+                "streak", streak, "message", message);
     }
 
     private int currentStreak(List<LocalDate> days) {

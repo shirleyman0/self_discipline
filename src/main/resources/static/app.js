@@ -125,6 +125,38 @@ const CO_BUILD_GIFTS = [
     { code: 'LANTERN', icon: '🏮', name: '守望灯', desc: '永久照亮 TA 的夜路' }
 ];
 
+// 序章:星球起源。首次进入播放一次,编年史卡片可重读。文案正典见 docs/WORLDVIEW.md。
+const PROLOGUE = [
+    {
+        icon: '✦', title: '静默旋臂',
+        lines: [
+            '宇宙很大，也很安静。',
+            '恒星的光会衰老，信号会迷路，大多数星球一生都没有等到自己的名字。'
+        ]
+    },
+    {
+        icon: '🪐', title: '一粒星尘醒了',
+        lines: [
+            '但就在刚才，静默旋臂的边缘，一粒星尘第一次听见了你的名字——它醒了过来。',
+            '它还很小，冷得发抖，全部家当是一颗未点燃的星核，和一只同样刚醒来的星灵。'
+        ]
+    },
+    {
+        icon: '💓', title: '回响',
+        lines: [
+            '这类星球不靠恒星取暖，只靠「回响」——你对自己说到做到时产生的那一点热。',
+            '从今天起，你的每一次打卡是它的心跳，每一段专注是它的自转，每一篇复盘是它夜里的极光。放弃的日子会凝成陨石坠落——别怕，只要你回来，它就能重新生长。'
+        ]
+    },
+    {
+        icon: '🔭', title: '欢迎回家，开拓者',
+        lines: [
+            '带它走完整部演化史：从洪荒到文明，直到它成为能照亮别人的恒星。',
+            '深空里，已经有星球在等着与你互相照亮了。'
+        ]
+    }
+];
+
 const QUOTES = [
     '自律不是苦行，是把选择权拿回自己手里',
     '你今天的每一次打卡，都是星球的一次心跳',
@@ -139,7 +171,10 @@ const QUOTES = [
     '失败记录不可怕，可怕的是不写复盘',
     '你在专注舱的每一分钟，宇宙都看得见',
     '积分会花完，但等级永远是你的',
-    '星球不会一夜进化，但每天都在变'
+    '星球不会一夜进化，但每天都在变',
+    '宇宙对物质沉默，只对坚持回响',
+    '陨石砸不塌一颗星球，连续的放弃才可以',
+    '星灵等的不是完美的你，是回来的你'
 ];
 
 let audioCtx = null;
@@ -191,6 +226,9 @@ const app = createApp({
             giftPick: '',
             coBuildGifts: CO_BUILD_GIFTS,
             epochPreview: null,
+            // 序章
+            prologue: false,
+            prologueStep: 0,
             // 地表世界
             surfaceMode: false,
             landing: false,
@@ -259,6 +297,12 @@ const app = createApp({
     computed: {
         panelTitle() {
             return PANEL_TITLES[this.panel] || {};
+        },
+        prologueBeats() {
+            return PROLOGUE;
+        },
+        prologueBeat() {
+            return PROLOGUE[Math.max(0, Math.min(PROLOGUE.length - 1, this.prologueStep))];
         },
         scenePlanet() {
             return this.visiting ? this.partnerPlanetData : this.myPlanet;
@@ -457,6 +501,28 @@ const app = createApp({
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             location.href = '/login.html';
+        },
+
+        // ---- 序章 ----
+        advancePrologue() {
+            if (this.prologueStep < PROLOGUE.length - 1) {
+                blip(1180, .06);
+                this.prologueStep++;
+            } else {
+                blip(1560, .1);
+                this.closePrologue();
+            }
+        },
+        closePrologue() {
+            localStorage.setItem('prologueSeen', '1');
+            this.prologue = false;
+            this.prologueStep = 0;
+        },
+        replayPrologue() {
+            blip();
+            this.panel = null;
+            this.prologueStep = 0;
+            this.prologue = true;
         },
 
         // ---- 3D 星球 ----
@@ -1298,6 +1364,10 @@ const app = createApp({
         makeStars();
         try {
             await this.loadAll();
+            // 第一次醒来的星球先讲完自己的故事(序章),之后不再打扰。
+            if (!localStorage.getItem('prologueSeen')) {
+                this.prologue = true;
+            }
         } catch (e) {
             console.error(e);
         }
@@ -1309,9 +1379,10 @@ const app = createApp({
                 this.landOnPlanet();
             }, 600);
         }
-        // ESC：取消放置 > 关面板 > 升空
+        // ESC：关序章 > 取消放置 > 关面板 > 升空
         this._onGlobalKeydown = e => {
             if (e.key !== 'Escape') return;
+            if (this.prologue) { this.closePrologue(); return; }
             if (this.placing) { this.cancelWorldBuild(); return; }
             if (this.panel) { this.closePanel(); return; }
             if (this.surfaceMode) this.liftOff();
