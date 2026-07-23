@@ -8,6 +8,7 @@ import com.mike.discipline.entity.PlanetDecoration;
 import com.mike.discipline.entity.PlanetMessage;
 import com.mike.discipline.entity.PointKind;
 import com.mike.discipline.entity.PointLog;
+import com.mike.discipline.entity.Review;
 import com.mike.discipline.entity.User;
 import com.mike.discipline.entity.WorldItem;
 import com.mike.discipline.entity.WorldObject;
@@ -18,6 +19,7 @@ import com.mike.discipline.repository.HabitRepository;
 import com.mike.discipline.repository.PlanetDecorationRepository;
 import com.mike.discipline.repository.PlanetMessageRepository;
 import com.mike.discipline.repository.PointLogRepository;
+import com.mike.discipline.repository.ReviewRepository;
 import com.mike.discipline.repository.UserRepository;
 import com.mike.discipline.repository.WorldObjectRepository;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -53,6 +56,20 @@ public class PlanetService {
     private static final int MAX_WORLD_OBJECTS = 500;
     private static final Set<String> AVATAR_STYLES = Set.of(
             "EXPLORER", "ARCHITECT", "RANGER", "ASTRONAUT");
+    private static final Map<String, SharedGift> SHARED_GIFTS = Map.of(
+            "TREE", new SharedGift("TREE", "共生树", "🌳"),
+            "LANTERN", new SharedGift("LANTERN", "守望灯", "🏮"));
+
+    private record SharedGift(String code, String title, String emoji) {
+    }
+
+    private record HealthSnapshot(String state, int failStreak, int recentFails,
+                                  int recentProductiveDays, boolean reviewedToday) {
+    }
+
+    private record ChronicleEntry(LocalDateTime at, String type, String icon,
+                                  String title, String detail) {
+    }
 
     /** 稳定的 API 输出 DTO，不把 userId 等持久化细节暴露给前端。 */
     public record WorldObjectView(Long id, String kind, String title, double x, double z,
@@ -74,6 +91,7 @@ public class PlanetService {
     private final PlanetDecorationRepository decorationRepository;
     private final GamificationService gamificationService;
     private final WorldObjectRepository worldObjectRepository;
+    private final ReviewRepository reviewRepository;
 
     public PlanetService(UserRepository userRepository,
                          HabitRepository habitRepository,
@@ -83,7 +101,8 @@ public class PlanetService {
                          PlanetMessageRepository messageRepository,
                          PlanetDecorationRepository decorationRepository,
                          GamificationService gamificationService,
-                         WorldObjectRepository worldObjectRepository) {
+                         WorldObjectRepository worldObjectRepository,
+                         ReviewRepository reviewRepository) {
         this.userRepository = userRepository;
         this.habitRepository = habitRepository;
         this.checkinRepository = checkinRepository;
@@ -93,6 +112,7 @@ public class PlanetService {
         this.decorationRepository = decorationRepository;
         this.gamificationService = gamificationService;
         this.worldObjectRepository = worldObjectRepository;
+        this.reviewRepository = reviewRepository;
     }
 
     /** 我的星球 */
@@ -116,6 +136,13 @@ public class PlanetService {
         userRepository.save(user);
     }
 
+    @Transactional
+    public void renameResident(Long userId, String name) {
+        User user = mustFind(userId);
+        user.setResidentName(name.trim());
+        userRepository.save(user);
+    }
+
     /** 在搭档的星球留言（可带小礼物 emoji） */
     @Transactional
     public void leaveMessage(Long userId, String content, String gift) {
@@ -123,12 +150,16 @@ public class PlanetService {
         if (me.getPartnerId() == null) {
             throw ApiException.badRequest("还没有搭档");
         }
+        String normalizedGift = gift == null || gift.isBlank() ? null : gift.trim().toUpperCase();
+        if (normalizedGift != null && !SHARED_GIFTS.containsKey(normalizedGift)) {
+            throw ApiException.badRequest("只能留下共生树或守望灯");
+        }
         PlanetMessage msg = new PlanetMessage();
         msg.setOwnerId(me.getPartnerId());
         msg.setFromUserId(userId);
         msg.setFromNickname(me.getNickname());
-        msg.setContent(content);
-        msg.setGift(gift);
+        msg.setContent(content.trim());
+        msg.setGift(normalizedGift);
         messageRepository.save(msg);
     }
 
@@ -201,9 +232,14 @@ public class PlanetService {
         }
         // 纪元锁：里程碑要求上一纪元已解锁，普通摆件要求所属纪元已解锁。
         int unlocked = unlockedEpoch(objects);
+        HealthSnapshot health = healthSnapshot(userId);
+        int effectiveEpoch = effectiveEpoch(unlocked, health.failStreak());
         int required = item.isKeystone() ? item.getEpoch() - 1 : item.getEpoch();
-        if (unlocked < required) {
-            throw ApiException.badRequest("「" + item.getTitle() + "」尚未解锁，请先完成上一纪元的里程碑工程");
+        if (effectiveEpoch < required) {
+            String reason = effectiveEpoch < unlocked
+                    ? "星球正在荒漠化，恢复打卡或写复盘后才能继续推进主线"
+                    : "请先完成上一纪元的里程碑工程";
+            throw ApiException.badRequest("「" + item.getTitle() + "」尚未解锁，" + reason);
         }
         if (item.isKeystone() && objects.stream().anyMatch(o -> o.getKind() == item)) {
             throw ApiException.badRequest("「" + item.getTitle() + "」是里程碑工程，整颗星球只能建造一座");
@@ -321,7 +357,6 @@ public class PlanetService {
         m.put("points", user.getPoints());
         m.put("level", GamificationService.levelOf(user.getXp()));
         m.put("buildings", buildings(userId));
-        m.put("health", health(userId));
         // 兼容升级前已经存在的用户：旧数据没有 avatarStyle，Set.of.contains(null)
         // 会直接抛出 NPE，导致整个星球首页无法打开。
         String avatarStyle = user.getAvatarStyle() != null
@@ -343,6 +378,13 @@ public class PlanetService {
                 "hairColor", hairColor));
         List<WorldObject> worldObjects = worldObjectRepository.findByUserIdOrderByCreatedAtAsc(userId);
         int unlockedEpoch = unlockedEpoch(worldObjects);
+        HealthSnapshot health = healthSnapshot(userId);
+        int regression = regressionFor(health.failStreak());
+        int effectiveEpoch = Math.max(0, unlockedEpoch - regression);
+        Map<String, Object> starfield = starfield(user, worldObjects);
+        boolean stellarActive = Boolean.TRUE.equals(starfield.get("active"));
+        int highestEpoch = stellarActive ? 7 : unlockedEpoch;
+        int displayEpoch = regression > 0 ? effectiveEpoch : highestEpoch;
         Set<WorldItem> ownedKinds = worldObjects.stream()
                 .map(WorldObject::getKind)
                 .collect(Collectors.toSet());
@@ -350,9 +392,24 @@ public class PlanetService {
                 .map(WorldObjectView::from)
                 .toList());
         m.put("unlockedEpoch", unlockedEpoch);
+        m.put("effectiveEpoch", effectiveEpoch);
+        m.put("highestEpoch", highestEpoch);
+        m.put("displayEpoch", displayEpoch);
+        m.put("health", Map.of(
+                "state", health.state(),
+                "failStreak", health.failStreak(),
+                "recentFails", health.recentFails(),
+                "recentProductiveDays", health.recentProductiveDays(),
+                "reviewedToday", health.reviewedToday(),
+                "regression", regression));
+        m.put("resident", resident(user, userId, effectiveEpoch, displayEpoch >= 7, health));
+        m.put("starfield", starfield);
+        List<Map<String, Object>> coBuilds = sharedBuilds(userId);
+        m.put("coBuilds", coBuilds);
+        m.put("chronicle", chronicle(user, worldObjects, coBuilds, health));
         m.put("worldCatalog", Arrays.stream(WorldItem.values())
                 .map(item -> {
-                    boolean locked = unlockedEpoch <
+                    boolean locked = effectiveEpoch <
                             (item.isKeystone() ? item.getEpoch() - 1 : item.getEpoch());
                     Map<String, Object> im = new HashMap<>();
                     im.put("code", item.name());
@@ -365,6 +422,8 @@ public class PlanetService {
                     im.put("maxLevel", item.getMaxLevel());
                     im.put("locked", locked);
                     im.put("owned", ownedKinds.contains(item));
+                    im.put("regressed", locked && unlockedEpoch >=
+                            (item.isKeystone() ? item.getEpoch() - 1 : item.getEpoch()));
                     return im;
                 })
                 .toList());
@@ -456,8 +515,8 @@ public class PlanetService {
         };
     }
 
-    /** 健康度：最近 7 天失败/产出 → FLOURISHING / GLOOMY / DESERT */
-    private Map<String, Object> health(Long userId) {
+    /** 健康度：最近 7 天失败/产出/复盘 → FLOURISHING / GLOOMY / DESERT。 */
+    private HealthSnapshot healthSnapshot(Long userId) {
         LocalDate today = LocalDate.now();
         LocalDateTime weekAgo = today.minusDays(6).atStartOfDay();
         List<PointLog> logs = pointLogRepository.findByUserIdAndCreatedAtBetween(
@@ -475,6 +534,16 @@ public class PlanetService {
             }
         }
 
+        boolean reviewedToday = false;
+        for (Review review : reviewRepository.findTop30ByUserIdOrderByReviewDateDesc(userId)) {
+            if (!review.getReviewDate().isBefore(today.minusDays(6))) {
+                productiveDays.add(review.getReviewDate());
+            }
+            if (review.getReviewDate().equals(today)) {
+                reviewedToday = true;
+            }
+        }
+
         // 从今天往回数连续「颓废日」（有失败且无产出；今天无任何记录不打断也不累计）
         int failStreak = 0;
         for (LocalDate d = today; !d.isBefore(today.minusDays(6)); d = d.minusDays(1)) {
@@ -489,11 +558,167 @@ public class PlanetService {
         }
 
         String state = failStreak >= 4 ? "DESERT" : (failStreak >= 2 ? "GLOOMY" : "FLOURISHING");
-        return Map.of(
-                "state", state,
-                "failStreak", failStreak,
-                "recentFails", failedDays.size(),
-                "recentProductiveDays", productiveDays.size());
+        return new HealthSnapshot(state, failStreak, failedDays.size(),
+                productiveDays.size(), reviewedToday);
+    }
+
+    /** 4 天无产出暂退 1 纪元，6 天暂退 2 纪元；永久里程碑本身不会丢失。 */
+    static int regressionFor(int failStreak) {
+        return failStreak >= 6 ? 2 : (failStreak >= 4 ? 1 : 0);
+    }
+
+    static int effectiveEpoch(int unlockedEpoch, int failStreak) {
+        return Math.max(0, unlockedEpoch - regressionFor(failStreak));
+    }
+
+    /**
+     * 星灵:随纪元成长的星球居民。恒星纪(stellar,且未因荒漠化暂退)时形态变为
+     * 「执灯星灵」——灯芯是玩家全部的坚持;stage 仍按 0..6 输出,前端造型不受影响。
+     */
+    private Map<String, Object> resident(User user, Long userId, int epoch,
+                                         boolean stellar, HealthSnapshot health) {
+        List<LocalDate> days = checkinRepository.findByUserId(userId).stream()
+                .map(HabitCheckin::getCheckinDate).distinct().sorted().toList();
+        int streak = currentStreak(days);
+        String mood = health.state().equals("DESERT") ? "SCARED"
+                : health.state().equals("GLOOMY") ? "WORRIED"
+                : streak >= 7 ? "ECSTATIC"
+                : days.contains(LocalDate.now()) ? "HAPPY" : "CALM";
+        String[] forms = {"沉睡孢子", "风芽幼体", "潮汐幼兽", "原生星灵",
+                "林间星灵", "星野伙伴", "文明居民"};
+        String message = switch (mood) {
+            case "SCARED" -> "这里正在变冷……陪我完成一件小事，我们一起让星球回暖。";
+            case "WORRIED" -> "云压得有点低，但你回来，我就不怕。";
+            case "ECSTATIC" -> "连续 " + streak + " 天！我每天都在等这颗星球的心跳。";
+            case "HAPPY" -> "今天的星球亮了一下，我知道是你回来了。";
+            default -> stellar
+                    ? "灯我一直提着。今天也去点亮一点什么吧，很远的星星都看得见。"
+                    : "我会守在这里，等你今天种下第一点能量。";
+        };
+        String name = user.getResidentName() == null || user.getResidentName().isBlank()
+                ? "星灵" : user.getResidentName();
+        String form = stellar ? "执灯星灵" : forms[Math.max(0, Math.min(6, epoch))];
+        return Map.of("name", name, "form", form,
+                "stage", Math.max(0, Math.min(6, epoch)), "mood", mood,
+                "streak", streak, "message", message);
+    }
+
+    private int currentStreak(List<LocalDate> days) {
+        if (days.isEmpty()) return 0;
+        Set<LocalDate> set = new HashSet<>(days);
+        LocalDate cursor = set.contains(LocalDate.now()) ? LocalDate.now() : LocalDate.now().minusDays(1);
+        int streak = 0;
+        while (set.contains(cursor)) {
+            streak++;
+            cursor = cursor.minusDays(1);
+        }
+        return streak;
+    }
+
+    private Map<String, Object> starfield(User user, List<WorldObject> objects) {
+        boolean civilization = unlockedEpoch(objects) >= 6;
+        boolean observatory = objects.stream().anyMatch(o -> o.getKind() == WorldItem.OBSERVATORY);
+        int checkins = Math.toIntExact(Math.min(Integer.MAX_VALUE, checkinRepository.countByUserId(user.getId())));
+        int stellarLevel = 1 + checkins / 50;
+        Map<String, Object> result = new HashMap<>();
+        result.put("available", civilization);
+        result.put("active", civilization && observatory);
+        result.put("stellarLevel", stellarLevel);
+        result.put("radiance", (checkins % 50) * 2);
+        result.put("litStars", checkins / 30);
+        result.put("nextAt", 50 - checkins % 50);
+        result.put("partnerConnected", false);
+        if (user.getPartnerId() != null) {
+            userRepository.findById(user.getPartnerId()).ifPresent(partner -> {
+                List<WorldObject> partnerObjects = worldObjectRepository
+                        .findByUserIdOrderByCreatedAtAsc(partner.getId());
+                boolean partnerActive = unlockedEpoch(partnerObjects) >= 6 && partnerObjects.stream()
+                        .anyMatch(o -> o.getKind() == WorldItem.OBSERVATORY);
+                result.put("partnerConnected", civilization && observatory && partnerActive);
+                result.put("partnerName", partner.getNickname());
+                result.put("partnerPlanetName", partner.getPlanetName() == null || partner.getPlanetName().isBlank()
+                        ? partner.getNickname() + " 的星球" : partner.getPlanetName());
+            });
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> sharedBuilds(Long userId) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        int index = 0;
+        for (PlanetMessage message : messageRepository.findByOwnerIdAndGiftIsNotNullOrderByCreatedAtAsc(userId)) {
+            SharedGift gift = SHARED_GIFTS.get(message.getGift());
+            if (gift == null) continue;
+            double angle = index * 2.399963229728653;
+            double radius = 31 + (index % 4) * 8;
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", message.getId());
+            item.put("code", gift.code());
+            item.put("kind", "GIFT_" + gift.code());
+            item.put("title", gift.title());
+            item.put("emoji", gift.emoji());
+            item.put("fromNickname", message.getFromNickname());
+            item.put("message", message.getContent());
+            item.put("createdAt", message.getCreatedAt());
+            item.put("x", Math.round(Math.cos(angle) * radius * 10.0) / 10.0);
+            item.put("z", Math.round(Math.sin(angle) * radius * 10.0) / 10.0);
+            result.add(item);
+            index++;
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> chronicle(User user, List<WorldObject> objects,
+                                                 List<Map<String, Object>> coBuilds,
+                                                 HealthSnapshot health) {
+        List<ChronicleEntry> entries = new ArrayList<>();
+        entries.add(new ChronicleEntry(user.getCreatedAt(), "ORIGIN", "✦", "星球诞生",
+                "第一粒星尘有了名字，从这一天开始等待你的每次归来。"));
+        for (WorldObject object : objects) {
+            WorldItem item = object.getKind();
+            if (item.isKeystone()) {
+                int reached = item == WorldItem.ARK ? 6 : item.getEpoch();
+                entries.add(new ChronicleEntry(object.getCreatedAt(), "EPOCH", "◉",
+                        epochTitle(reached) + "解锁", item.getTitle() + "落成，" + epochDetail(reached)));
+            } else if (item == WorldItem.LIBRARY || item == WorldItem.OBSERVATORY || item == WorldItem.CASTLE) {
+                entries.add(new ChronicleEntry(object.getCreatedAt(), "LANDMARK", "◆",
+                        item.getTitle() + "落成", item.getDescription()));
+                if (item == WorldItem.OBSERVATORY) {
+                    entries.add(new ChronicleEntry(object.getCreatedAt().plusSeconds(1), "STELLAR", "✺",
+                            "恒星纪开启", "星球开始向深空辐射光芒，寻找可以互相照亮的邻星。"));
+                }
+            }
+        }
+        pointLogRepository.findTop20ByUserIdOrderByCreatedAtDesc(user.getId()).stream()
+                .filter(p -> p.getKind() == PointKind.STREAK || p.getKind() == PointKind.ACHIEVEMENT)
+                .forEach(p -> entries.add(new ChronicleEntry(p.getCreatedAt(), "MOMENT", "✧",
+                        p.getKind() == PointKind.STREAK ? "坚持被星球记住" : "星球勋章点亮", p.getReason())));
+        reviewRepository.findTop30ByUserIdOrderByReviewDateDesc(user.getId()).stream().limit(6)
+                .forEach(r -> entries.add(new ChronicleEntry(r.getUpdatedAt(), "RECOVERY", "↻",
+                        "星球开始回暖", "你写下复盘，裂缝被认真看见，也就有了愈合的出口。")));
+        for (Map<String, Object> gift : coBuilds) {
+            entries.add(new ChronicleEntry((LocalDateTime) gift.get("createdAt"), "VISIT", "∞",
+                    gift.get("fromNickname") + " 来过这里",
+                    "留下了「" + gift.get("title") + "」：" + gift.get("message")));
+        }
+        if (health.failStreak() >= 4) {
+            entries.add(new ChronicleEntry(LocalDateTime.now(), "DESERT", "△", "荒漠化警报",
+                    "生态暂时退化，但永久里程碑仍在；一次行动或一篇复盘就能让它重新生长。"));
+        }
+        return entries.stream().sorted(Comparator.comparing(ChronicleEntry::at).reversed()).limit(40)
+                .map(e -> Map.<String, Object>of("at", e.at(), "type", e.type(), "icon", e.icon(),
+                        "title", e.title(), "detail", e.detail())).toList();
+    }
+
+    private String epochTitle(int epoch) {
+        return new String[]{"洪荒纪", "大气纪", "海洋纪", "生命纪", "绿色纪", "动物纪", "文明纪"}
+                [Math.max(0, Math.min(6, epoch))];
+    }
+
+    private String epochDetail(int epoch) {
+        return new String[]{"星核在寂静中等待", "天空第一次泛蓝", "第一场雨汇成海洋", "水边出现生命",
+                "草原与森林开始蔓延", "飞鸟游鱼有了家", "夜晚亮起属于坚持的灯火"}
+                [Math.max(0, Math.min(6, epoch))];
     }
 
     private User mustFind(Long userId) {

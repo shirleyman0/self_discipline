@@ -22,6 +22,10 @@ public class User {
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
+    /** 注册时验证过的邮箱。nullable 是为了兼容数据库中已有的老用户。 */
+    @Column(unique = true, length = 254)
+    private String email;
+
     @JsonIgnore
     @Column(nullable = false)
     private String passwordHash;
@@ -47,6 +51,10 @@ public class User {
     /** 星球名字 */
     @Column(length = 30)
     private String planetName;
+
+    /** 陪伴星球成长的常驻居民名字；旧账号读取时由服务层补默认值。 */
+    @Column(length = 20)
+    private String residentName = "星灵";
 
     /**
      * 3D 世界中的方块角色职业外观。

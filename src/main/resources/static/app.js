@@ -82,7 +82,7 @@ const PANEL_TITLES = {
     tasks: { icon: '📋', name: '任务清单', sub: '完成拿积分，拖延掉积分' },
     focus: { icon: '⏱️', name: '专注舱', sub: '进入心流，屏蔽整个宇宙' },
     shop: { icon: '🛍️', name: '奖励商店', sub: '攒的积分，痛快花掉' },
-    partner: { icon: '👥', name: '共航搭档', sub: '互相监督，每周 PK' },
+    partner: { icon: '👥', name: '共航搭档', sub: '互相监督，也一起留下世界' },
     stats: { icon: '📊', name: '数据舱', sub: '复盘让下一周更强' }
 };
 
@@ -98,7 +98,7 @@ const TIERS = {
     8: { name: '恒星', desc: '你已成为照亮别人的光', minLevel: 10 }
 };
 
-// 分类建筑：level 0=工地, 1..4
+// 分类建筑：level 0=工地, 1..4。习惯打卡累计次数决定同类建筑的成长阶段。
 const CAT_BUILDINGS = {
     STUDY: { emojis: ['🚧', '📖', '🏫', '📚', '🎓'], names: ['学习工地', '书摊', '书屋', '图书馆', '大学城'] },
     EXERCISE: { emojis: ['🚧', '🤸', '🏃', '🏋️', '🏟️'], names: ['运动工地', '空地', '跑道', '健身房', '体育场'] },
@@ -106,6 +106,56 @@ const CAT_BUILDINGS = {
     CREATE: { emojis: ['🚧', '🖌️', '🎨', '🎭', '🏰'], names: ['创作工地', '画架', '画室', '工作室', '艺术宫'] },
     LIFE: { emojis: ['🚧', '🌱', '🏕️', '🏘️', '🎡'], names: ['生活工地', '菜园', '营地', '街区', '游乐园'] }
 };
+
+// 星球纪元（0..6）：与后端 WorldItem.epoch、盖亚改造计划一一对应，是首页星球外观的唯一来源。
+// orb 为进化阶梯里的小圆点用的 CSS 类（复用 .tier-orb.e0..e7）。
+const EPOCHS = [
+    { name: '洪荒纪', desc: '星尘包裹着幼年星核，等待被唤醒', orb: 'e0' },
+    { name: '大气纪', desc: '天空第一次泛起蓝色', orb: 'e1' },
+    { name: '海洋纪', desc: '海水铺满星球，生命的摇篮出现', orb: 'e2' },
+    { name: '生命纪', desc: '水边泛起第一抹藻绿', orb: 'e3' },
+    { name: '绿色纪', desc: '草原与森林蔓延全球', orb: 'e4' },
+    { name: '动物纪', desc: '飞鸟游鱼栖息，星球戴上光环', orb: 'e5' },
+    { name: '文明纪', desc: '夜晚的灯火属于你的坚持', orb: 'e6' },
+    { name: '恒星纪', desc: '天文台把你的坚持送向深空', orb: 'e7' }
+];
+
+const CO_BUILD_GIFTS = [
+    { code: 'TREE', icon: '🌳', name: '共生树', desc: '永久种在 TA 的纪念林' },
+    { code: 'LANTERN', icon: '🏮', name: '守望灯', desc: '永久照亮 TA 的夜路' }
+];
+
+// 序章:星球起源。首次进入播放一次,编年史卡片可重读。文案正典见 docs/WORLDVIEW.md。
+const PROLOGUE = [
+    {
+        icon: '✦', title: '静默旋臂',
+        lines: [
+            '宇宙很大，也很安静。',
+            '恒星的光会衰老，信号会迷路，大多数星球一生都没有等到自己的名字。'
+        ]
+    },
+    {
+        icon: '🪐', title: '一粒星尘醒了',
+        lines: [
+            '但就在刚才，静默旋臂的边缘，一粒星尘第一次听见了你的名字——它醒了过来。',
+            '它还很小，冷得发抖，全部家当是一颗未点燃的星核，和一只同样刚醒来的星灵。'
+        ]
+    },
+    {
+        icon: '💓', title: '回响',
+        lines: [
+            '这类星球不靠恒星取暖，只靠「回响」——你对自己说到做到时产生的那一点热。',
+            '从今天起，你的每一次打卡是它的心跳，每一段专注是它的自转，每一篇复盘是它夜里的极光。放弃的日子会凝成陨石坠落——别怕，只要你回来，它就能重新生长。'
+        ]
+    },
+    {
+        icon: '🔭', title: '欢迎回家，开拓者',
+        lines: [
+            '带它走完整部演化史：从洪荒到文明，直到它成为能照亮别人的恒星。',
+            '深空里，已经有星球在等着与你互相照亮了。'
+        ]
+    }
+];
 
 const QUOTES = [
     '自律不是苦行，是把选择权拿回自己手里',
@@ -121,7 +171,10 @@ const QUOTES = [
     '失败记录不可怕，可怕的是不写复盘',
     '你在专注舱的每一分钟，宇宙都看得见',
     '积分会花完，但等级永远是你的',
-    '星球不会一夜进化，但每天都在变'
+    '星球不会一夜进化，但每天都在变',
+    '宇宙对物质沉默，只对坚持回响',
+    '陨石砸不塌一颗星球，连续的放弃才可以',
+    '星灵等的不是完美的你，是回来的你'
 ];
 
 let audioCtx = null;
@@ -171,7 +224,11 @@ const app = createApp({
             warping: false,
             visitMessage: '',
             giftPick: '',
-            tierPreview: null,
+            coBuildGifts: CO_BUILD_GIFTS,
+            epochPreview: null,
+            // 序章
+            prologue: false,
+            prologueStep: 0,
             // 地表世界
             surfaceMode: false,
             landing: false,
@@ -241,12 +298,19 @@ const app = createApp({
         panelTitle() {
             return PANEL_TITLES[this.panel] || {};
         },
+        prologueBeats() {
+            return PROLOGUE;
+        },
+        prologueBeat() {
+            return PROLOGUE[Math.max(0, Math.min(PROLOGUE.length - 1, this.prologueStep))];
+        },
         scenePlanet() {
             return this.visiting ? this.partnerPlanetData : this.myPlanet;
         },
-        sceneTier() {
-            if (this.tierPreview && !this.visiting) return this.tierPreview;
-            return this.scenePlanet ? this.tierOf(this.scenePlanet.level) : 1;
+        /** 首页星球实际渲染的纪元：预览优先，否则取当前已解锁纪元。epoch 0 是合法值。 */
+        sceneEpoch() {
+            if (this.epochPreview != null && !this.visiting) return this.epochPreview;
+            return this.scenePlanet ? (this.scenePlanet.displayEpoch ?? this.scenePlanet.unlockedEpoch ?? 0) : 0;
         },
         sceneHealth() {
             return this.scenePlanet ? this.scenePlanet.health.state : 'FLOURISHING';
@@ -263,6 +327,15 @@ const app = createApp({
         },
         myMessages() {
             return this.myPlanet ? (this.myPlanet.messages || []) : [];
+        },
+        sceneResident() {
+            return this.scenePlanet ? this.scenePlanet.resident : null;
+        },
+        myChronicle() {
+            return this.myPlanet ? (this.myPlanet.chronicle || []) : [];
+        },
+        myCoBuilds() {
+            return this.myPlanet ? (this.myPlanet.coBuilds || []) : [];
         },
         skyClass() {
             const h = new Date().getHours();
@@ -296,14 +369,32 @@ const app = createApp({
             if (!this.scenePlanet || !this.scenePlanet.decorations) return [];
             return this.scenePlanet.decorations.filter(d => d.orbit);
         },
-        tierLadder() {
-            const level = this.profile ? this.profile.level : 1;
-            const currentTier = this.tierOf(level);
-            return Object.entries(TIERS).map(([t, info]) => ({
+        /** 进化之路：7 个纪元，按已解锁纪元标出「已达成 / 当前 / 未解锁」。 */
+        epochLadder() {
+            const highest = this.myPlanet ? (this.myPlanet.highestEpoch ?? this.myPlanet.unlockedEpoch ?? 0) : 0;
+            const current = this.myPlanet ? (this.myPlanet.displayEpoch ?? highest) : 0;
+            return EPOCHS.map((info, i) => ({
                 ...info,
-                now: Number(t) === currentTier,
-                past: Number(t) < currentTier
+                epoch: i,
+                now: i === current,
+                past: i < current,
+                wilted: i > current && i <= highest,
+                locked: i > highest
             }));
+        },
+        /** 各分类建筑（打卡累计成长），后端已算好等级，前端补上外观名。 */
+        categoryBuildings() {
+            const list = (this.myPlanet && this.myPlanet.buildings) || [];
+            return list.map(b => {
+                const conf = CAT_BUILDINGS[b.category] || { emojis: [], names: [] };
+                const lv = Math.max(0, Math.min(4, b.level));
+                return {
+                    ...b,
+                    emoji: conf.emojis[lv] || '🚧',
+                    stageName: conf.names[lv] || '工地',
+                    maxStage: (conf.names.length || 5) - 1
+                };
+            });
         },
         recentFailures() {
             return this.profile ? this.profile.recentFailures : [];
@@ -351,9 +442,9 @@ const app = createApp({
     },
 
     watch: {
-        /** tier 变化（升级/预览/访问搭档）→ 重建 3D 星球 */
-        sceneTier(tier) {
-            if (this._p3d) this._p3d.setTier(tier);
+        /** 纪元变化（建成里程碑/预览/访问搭档）→ 重建 3D 星球 */
+        sceneEpoch(epoch) {
+            this.updatePlanet3D(epoch);
         }
     },
 
@@ -367,6 +458,10 @@ const app = createApp({
         },
         tierInfo(level) {
             return TIERS[this.tierOf(level)];
+        },
+        /** 纪元名（进化阶梯预览提示用） */
+        epochName(epoch) {
+            return (EPOCHS[epoch] || EPOCHS[0]).name;
         },
         xpForLevel(level) {
             const n = level - 1;
@@ -382,6 +477,10 @@ const app = createApp({
                 CHECKIN: '✅', TASK: '📋', FOCUS: '⏱️', ACHIEVEMENT: '🏅',
                 STREAK: '🔥', PUNISH: '💥', REDEEM: '🛍️'
             }[kind] || '✨';
+        },
+        giftIcon(code) {
+            const gift = CO_BUILD_GIFTS.find(item => item.code === code);
+            return gift ? gift.icon : (code || '');
         },
         fmtTime(iso) {
             if (!iso) return '';
@@ -404,6 +503,28 @@ const app = createApp({
             location.href = '/login.html';
         },
 
+        // ---- 序章 ----
+        advancePrologue() {
+            if (this.prologueStep < PROLOGUE.length - 1) {
+                blip(1180, .06);
+                this.prologueStep++;
+            } else {
+                blip(1560, .1);
+                this.closePrologue();
+            }
+        },
+        closePrologue() {
+            localStorage.setItem('prologueSeen', '1');
+            this.prologue = false;
+            this.prologueStep = 0;
+        },
+        replayPrologue() {
+            blip();
+            this.panel = null;
+            this.prologueStep = 0;
+            this.prologue = true;
+        },
+
         // ---- 3D 星球 ----
         initPlanet3D() {
             const el = this.$refs.planetMount;
@@ -411,11 +532,27 @@ const app = createApp({
             try {
                 this._p3d = Planet3D.mount(el, {
                     size: 640,
-                    tier: this.sceneTier,
+                    epoch: this.sceneEpoch,
+                    companion: this.sceneResident,
+                    coBuilds: (this.scenePlanet && this.scenePlanet.coBuilds) || [],
+                    radiance: (this.scenePlanet && this.scenePlanet.starfield) || {},
                     onClick: () => this.landOnPlanet()
                 });
             } catch (e) {
                 console.error('3D 星球初始化失败', e);
+            }
+        },
+        updatePlanet3D(epoch = this.sceneEpoch) {
+            if (!this._p3d) return;
+            if (this._p3d.setState) {
+                this._p3d.setState({
+                    epoch,
+                    companion: this.sceneResident,
+                    coBuilds: (this.scenePlanet && this.scenePlanet.coBuilds) || [],
+                    radiance: (this.scenePlanet && this.scenePlanet.starfield) || {}
+                });
+            } else {
+                this._p3d.setEpoch(epoch);
             }
         },
 
@@ -439,8 +576,12 @@ const app = createApp({
                 const world = window.World3D.mount(el, {
                     seed: this.worldSeed(planet.nickname || planet.planetName || 'planet'),
                     health: planet.health ? planet.health.state : 'FLOURISHING',
+                    epoch: planet.effectiveEpoch ?? planet.unlockedEpoch ?? 0,
                     level: planet.level || 1,
-                    objects: planet.worldObjects || [],
+                    objects: [
+                        ...(planet.worldObjects || []),
+                        ...(planet.coBuilds || []).map(gift => ({ ...gift, id: 'shared-' + gift.id, shared: true }))
+                    ],
                     avatar: planet.avatar || this.avatarForm,
                     readonly: this.visiting,
                     onGroundClick: point => this.placeWorldAt(point),
@@ -557,7 +698,7 @@ const app = createApp({
         // ---- 持久化世界建造 ----
         /** 世界目录 → [{epoch, name, locked, items}]，商店与创造台共用 */
         epochGroupsOf(catalog) {
-            const names = ['冥古宙 · 荒芜月面', '大气纪', '海洋纪', '生命纪', '绿色纪', '动物纪', '文明纪'];
+            const names = ['洪荒纪 · 星尘星核', '大气纪', '海洋纪', '生命纪', '绿色纪', '动物纪', '文明纪'];
             const groups = [];
             for (const item of (catalog || [])) {
                 let g = groups.find(x => x.epoch === item.epoch);
@@ -621,6 +762,9 @@ const app = createApp({
         },
         worldObjectClick(object) {
             if (!object || this.placing) return;
+            if (object.shared) {
+                return this.toast(`${object.fromNickname} 留下的「${object.title}」：${object.message}`);
+            }
             if (this.visiting) return this.toast(`这是 TA 建造的「${object.title || object.kind}」`);
             const cat = ((this.scenePlanet && this.scenePlanet.worldCatalog) || [])
                 .find(c => c.code === object.kind) || {};
@@ -801,6 +945,7 @@ const app = createApp({
         async loadPlanet() {
             this.myPlanet = await api('/api/planet');
             if (this.myPlanet.avatar) this.avatarForm = { ...this.myPlanet.avatar };
+            this.$nextTick(() => this.updatePlanet3D());
         },
         async renamePlanet() {
             const name = prompt('给你的星球起个名字（30 字以内）：',
@@ -810,6 +955,20 @@ const app = createApp({
                 await api('/api/planet/name', { method: 'PUT', body: JSON.stringify({ name: name.trim() }) });
                 await this.loadPlanet();
                 this.toast(`🪐 星球已更名为「${name.trim()}」`);
+            } catch (e) {
+                this.toast(e.message, true);
+            }
+        },
+        async renameResident() {
+            const current = this.myPlanet && this.myPlanet.resident ? this.myPlanet.resident.name : '星灵';
+            const name = prompt('给你的星灵起个名字（20 字以内）：', current);
+            if (!name || !name.trim()) return;
+            try {
+                await api('/api/planet/resident/name', {
+                    method: 'PUT', body: JSON.stringify({ name: name.trim() })
+                });
+                await this.loadPlanet();
+                this.toast(`✦ 星灵从此叫「${name.trim()}」`);
             } catch (e) {
                 this.toast(e.message, true);
             }
@@ -837,6 +996,10 @@ const app = createApp({
                 this.toast(e.message, true);
             }
         },
+        startCoBuild(code) {
+            this.giftPick = code;
+            this.visitPartner();
+        },
         goHome() {
             if (this.warping) return;
             blip(880, 0.15);
@@ -860,9 +1023,12 @@ const app = createApp({
                     method: 'POST',
                     body: JSON.stringify({ content: this.visitMessage, gift: this.giftPick || null })
                 });
+                const placed = this.giftPick;
                 this.visitMessage = '';
                 this.giftPick = '';
-                this.toast('💌 留言已放在 TA 的星球上');
+                this.partnerPlanetData = await api('/api/planet/partner');
+                this.$nextTick(() => this.updatePlanet3D());
+                this.toast(placed ? '∞ 共建物已永久留在 TA 的星球上' : '💌 留言已放在 TA 的星球上');
             } catch (e) {
                 this.toast(e.message, true);
             }
@@ -918,7 +1084,7 @@ const app = createApp({
                 await api('/api/habits', { method: 'POST', body: JSON.stringify(this.habitForm) });
                 this.habitForm = { name: '', icon: '', category: this.habitForm.category };
                 await Promise.all([this.loadHabits(), this.loadPlanet()]);
-                this.toast('✅ 新习惯已创建，星球上多了一块工地');
+                this.toast('✅ 新习惯已创建，星球档案里多了一块工地');
             } catch (e) {
                 this.toast(e.message, true);
             }
@@ -1186,8 +1352,8 @@ const app = createApp({
                     method: 'POST',
                     body: JSON.stringify({ content: this.reviewContent })
                 });
-                await this.loadReviews();
-                this.toast('📝 复盘已保存，星球的裂缝修复了一点');
+                await Promise.all([this.loadReviews(), this.loadPlanet()]);
+                this.toast('↻ 复盘已保存，星球开始回暖，暂退的纪元正在恢复');
             } catch (e) {
                 this.toast(e.message, true);
             }
@@ -1198,6 +1364,10 @@ const app = createApp({
         makeStars();
         try {
             await this.loadAll();
+            // 第一次醒来的星球先讲完自己的故事(序章),之后不再打扰。
+            if (!localStorage.getItem('prologueSeen')) {
+                this.prologue = true;
+            }
         } catch (e) {
             console.error(e);
         }
@@ -1209,9 +1379,10 @@ const app = createApp({
                 this.landOnPlanet();
             }, 600);
         }
-        // ESC：取消放置 > 关面板 > 升空
+        // ESC：关序章 > 取消放置 > 关面板 > 升空
         this._onGlobalKeydown = e => {
             if (e.key !== 'Escape') return;
+            if (this.prologue) { this.closePrologue(); return; }
             if (this.placing) { this.cancelWorldBuild(); return; }
             if (this.panel) { this.closePanel(); return; }
             if (this.surfaceMode) this.liftOff();

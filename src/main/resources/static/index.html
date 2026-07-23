@@ -32,6 +32,23 @@
         <span>INTERSTELLAR TRANSFER</span>
     </div>
 
+    <!-- 序章:星球起源。首次进入播放一次,之后可从编年史重读。正典见 docs/WORLDVIEW.md -->
+    <div class="prologue" v-if="prologue">
+        <button class="prologue-skip" @click="closePrologue">跳过序章 ✕</button>
+        <div class="prologue-card" :key="prologueStep">
+            <small>PROLOGUE · {{ prologueStep + 1 }} / {{ prologueBeats.length }}</small>
+            <span class="prologue-icon">{{ prologueBeat.icon }}</span>
+            <h2>{{ prologueBeat.title }}</h2>
+            <p v-for="(line, i) in prologueBeat.lines" :key="i">{{ line }}</p>
+            <div class="prologue-dots">
+                <i v-for="(b, i) in prologueBeats" :key="i" :class="{on: i <= prologueStep}"></i>
+            </div>
+            <button class="prologue-next" @click="advancePrologue">
+                {{ prologueStep < prologueBeats.length - 1 ? '继续' : '✦ 开始第一次心跳' }}
+            </button>
+        </div>
+    </div>
+
     <!-- ==================== 星球场景 ==================== -->
     <div class="scene" :class="[skyClass, 'health-' + sceneHealth]" v-if="scenePlanet"
          @mousemove="sceneParallax">
@@ -76,7 +93,7 @@
                 🪐 {{ scenePlanet.planetName }}
             </div>
             <div class="p-tier">
-                Lv.{{ scenePlanet.level }} · {{ tierInfo(scenePlanet.level).name }} · {{ healthLabel }}
+                Lv.{{ scenePlanet.level }} · {{ epochName(scenePlanet.displayEpoch ?? scenePlanet.unlockedEpoch ?? 0) }} · {{ healthLabel }}
             </div>
             <div class="xp-bar"><i :style="{width: sceneLevelPercent + '%'}"></i></div>
             <div class="p-row">
@@ -108,10 +125,20 @@
             💥 星球遭到陨石撞击（{{ recentFailures.length }} 条失败记录）— 点击查看
         </div>
 
+        <div class="regression-chip" v-if="!surfaceMode && scenePlanet.health.regression > 0"
+             @click="visiting ? null : openPanel('planet')">
+            <b>生态暂退 {{ scenePlanet.health.regression }} 纪元</b>
+            <span>完成一次行动或写复盘即可让它重新生长</span>
+        </div>
+
         <!-- ==================== 轨道视角 ==================== -->
         <div class="planet-stage" :class="{warping: warping, dive: landing}" v-show="!surfaceMode">
             <div class="planet3d-wrap" :class="'health-' + sceneHealth" ref="planetMount"
                  :title="scenePlanet.planetName"></div>
+            <div class="spirit-callout" v-if="sceneResident" :class="'mood-' + sceneResident.mood">
+                <b>✦ {{ sceneResident.name }}</b>
+                <span>{{ sceneResident.message }}</span>
+            </div>
             <!-- 环绕星球的发光轨道环（纯装饰，倾斜透视） -->
             <div class="orbit-rings" aria-hidden="true">
                 <i class="orbit-ring r1"></i>
@@ -216,8 +243,10 @@
             </aside>
             <div class="visit-msg-bar" v-if="visiting && !placing">
                 <span class="gift-pick">
-                    <span v-for="g in ['🎁','🌸','☕','⭐','🍀']" :key="g"
-                          :class="{sel: giftPick === g}" @click="giftPick = giftPick === g ? '' : g">{{ g }}</span>
+                    <button v-for="g in coBuildGifts" :key="g.code" :title="g.desc"
+                            :class="{sel: giftPick === g.code}" @click="giftPick = giftPick === g.code ? '' : g.code">
+                        {{ g.icon }} {{ g.name }}
+                    </button>
                 </span>
                 <input type="text" v-model.trim="visitMessage" placeholder="给 TA 的世界留句话…" @keyup.enter="sendPlanetMessage">
                 <button class="btn-sm" @click="sendPlanetMessage">留言</button>
@@ -234,7 +263,7 @@
 
         <!-- 底部格言 -->
         <div class="hero-copy" v-if="!surfaceMode && !visiting">
-            <small>YOUR WORLD · YOUR DISCIPLINE</small>
+            <small>{{ myPlanet && myPlanet.starfield && myPlanet.starfield.active ? 'STELLAR ERA · YOUR LIGHT TRAVELS' : 'YOUR WORLD · YOUR DISCIPLINE' }}</small>
             <span>点击中央星球，进入你亲手创造的世界</span>
             <div class="quote-line">「 {{ quote }} 」</div>
         </div>
@@ -242,8 +271,10 @@
         <!-- 访问模式：留言表单 -->
         <div class="dock" v-if="visiting && !surfaceMode" style="gap:10px;padding:10px 16px">
             <span class="gift-pick">
-                <span v-for="g in ['🎁','🌸','☕','⭐','🍀']" :key="g"
-                      :class="{sel: giftPick === g}" @click="giftPick = giftPick === g ? '' : g">{{ g }}</span>
+                <button v-for="g in coBuildGifts" :key="g.code" :title="g.desc"
+                        :class="{sel: giftPick === g.code}" @click="giftPick = giftPick === g.code ? '' : g.code">
+                    {{ g.icon }} {{ g.name }}
+                </button>
             </span>
             <input type="text" v-model.trim="visitMessage" placeholder="给 TA 的星球留句话…"
                    style="width:240px;padding:7px 12px" @keyup.enter="sendPlanetMessage">
@@ -288,30 +319,96 @@
                         </p>
                         <div class="xp-bar"><i :style="{width: levelPercent + '%'}"></i></div>
                         <p class="muted" style="margin-top:6px">
-                            距离下一次进化还需 {{ profile.levelProgress.needed - profile.levelProgress.current }} 能量
+                            距离下一段位还需 {{ profile.levelProgress.needed - profile.levelProgress.current }} 经验
+                            <span style="opacity:.7">（星球外观由下方纪元决定，等级是你的个人段位）</span>
                         </p>
+                    </div>
+
+                    <div class="card spirit-card" v-if="myPlanet && myPlanet.resident">
+                        <div class="spirit-portrait" :class="['stage-' + myPlanet.resident.stage, 'mood-' + myPlanet.resident.mood]">
+                            <i></i><i></i><span>✦</span>
+                        </div>
+                        <div class="spirit-copy">
+                            <small>PLANET RESIDENT · {{ myPlanet.resident.form }}</small>
+                            <h3>{{ myPlanet.resident.name }}
+                                <button class="btn-sm btn-ghost" @click="renameResident">改名</button>
+                            </h3>
+                            <p>{{ myPlanet.resident.message }}</p>
+                            <span class="spirit-streak">连续打卡 {{ myPlanet.resident.streak }} 天 · {{ healthLabel }}</span>
+                        </div>
+                    </div>
+
+                    <div class="card recovery-card" v-if="myPlanet && myPlanet.health.regression > 0">
+                        <div class="recovery-mark">↻</div>
+                        <div>
+                            <h3>生态暂退了 {{ myPlanet.health.regression }} 个纪元</h3>
+                            <p>永久里程碑和建筑都还在。今天完成一次打卡、任务、专注，或到数据舱写一篇复盘，星球就会回暖。</p>
+                            <button class="btn-sm" @click="openPanel('stats')">写复盘，带它回家</button>
+                        </div>
                     </div>
 
                     <div class="card">
                         <h3>🌌 进化之路
-                            <span class="muted" style="font-weight:400">（点击任意阶段可预览星球外观）</span>
+                            <span class="muted" style="font-weight:400">（建成里程碑工程解锁下一纪元 · 点击可预览外观）</span>
                         </h3>
                         <div class="tier-ladder">
                             <div class="tier-step" style="cursor:pointer"
-                                 v-for="(t, i) in tierLadder" :key="i"
-                                 :class="{now: tierPreview ? tierPreview === i + 1 : t.now, past: t.past}"
-                                 @click="tierPreview = tierPreview === i + 1 ? null : i + 1">
-                                <span class="tier-orb-box"><i :class="'tier-orb t' + (i + 1)"
-                                      :style="{width: (11 + i * 2) + 'px', height: (11 + i * 2) + 'px'}"></i></span>
-                                <span>{{ t.now ? '📍' : (t.past ? '✅' : '🔒') }}</span>
+                                 v-for="t in epochLadder" :key="t.epoch"
+                                 :class="{now: epochPreview != null ? epochPreview === t.epoch : t.now, past: t.past}"
+                                 @click="epochPreview = epochPreview === t.epoch ? null : t.epoch">
+                                <span class="tier-orb-box"><i :class="'tier-orb ' + t.orb"
+                                      :style="{width: (11 + t.epoch * 2) + 'px', height: (11 + t.epoch * 2) + 'px'}"></i></span>
+                                <span>{{ t.now ? '📍' : (t.past ? '✅' : (t.wilted ? '🌾' : '🔒')) }}</span>
                                 <b>{{ t.name }}</b>
-                                <span class="muted">Lv.{{ t.minLevel }}+ · {{ t.desc }}</span>
+                                <span class="muted">{{ t.wilted ? '生态恢复后重新点亮 · ' : '' }}{{ t.desc }}</span>
                             </div>
                         </div>
-                        <p class="muted" v-if="tierPreview" style="margin-top:8px">
-                            🔭 正在预览「{{ tierLadder[tierPreview - 1].name }}」——
-                            <span class="link" @click="tierPreview = null" style="cursor:pointer">恢复真实状态</span>
+                        <p class="muted" v-if="epochPreview != null" style="margin-top:8px">
+                            🔭 正在预览「{{ epochName(epochPreview) }}」——
+                            <span class="link" @click="epochPreview = null" style="cursor:pointer">恢复真实状态</span>
                         </p>
+                    </div>
+
+                    <div class="card stellar-card" v-if="myPlanet && myPlanet.starfield && myPlanet.starfield.available">
+                        <div class="stellar-head">
+                            <div>
+                                <small>BEYOND CIVILIZATION</small>
+                                <h3>✺ {{ myPlanet.starfield.active ? '恒星纪' : '文明纪之后' }}</h3>
+                            </div>
+                            <b>辐光 Lv.{{ myPlanet.starfield.stellarLevel }}</b>
+                        </div>
+                        <template v-if="myPlanet.starfield.active">
+                            <div class="binary-system" :class="{linked: myPlanet.starfield.partnerConnected}">
+                                <i class="system-line"></i>
+                                <span class="system-star mine"><i></i><b>我的星球</b></span>
+                                <span class="system-star partner"><i></i><b>{{ myPlanet.starfield.partnerName || '等待邻星' }}</b></span>
+                            </div>
+                            <p class="muted" v-if="myPlanet.starfield.partnerConnected">
+                                你与「{{ myPlanet.starfield.partnerPlanetName }}」正在互相照亮，已共同组成一座双星星域。
+                            </p>
+                            <p class="muted" v-else>搭档也进入恒星纪后，两颗星球会连成永久可见的双星航路。</p>
+                            <div class="radiance-track"><i :style="{width: myPlanet.starfield.radiance + '%'}"></i></div>
+                            <p class="muted">再完成 {{ myPlanet.starfield.nextAt }} 次打卡，辐光升一级 · 已点亮 {{ myPlanet.starfield.litStars }} 颗远星</p>
+                        </template>
+                        <p v-else>在文明纪建成「星海天文台」，让星球第一次把你的坚持广播到深空。</p>
+                    </div>
+
+                    <div class="card" v-if="categoryBuildings.length">
+                        <h3>🏗 分类建筑
+                            <span class="muted" style="font-weight:400">（同类习惯打卡越多，建筑越高级）</span>
+                        </h3>
+                        <div class="cat-build-grid">
+                            <div class="cat-build" v-for="b in categoryBuildings" :key="b.category">
+                                <span class="cb-emoji">{{ b.emoji }}</span>
+                                <div class="cb-info">
+                                    <b>{{ b.stageName }}</b>
+                                    <span class="muted">{{ b.title }} · 打卡 {{ b.checkins }} 次</span>
+                                    <span class="cb-stars">
+                                        <i v-for="n in b.maxStage" :key="n" :class="{on: n <= b.level}">★</i>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -319,7 +416,29 @@
                         <p class="muted" v-if="!myMessages.length">还没有访客留言。邀请搭档来你的星球看看吧！</p>
                         <div class="msg-item" v-for="m in myMessages" :key="m.id">
                             <div class="m-head"><span>{{ m.fromNickname }}</span><span>{{ fmtTime(m.createdAt) }}</span></div>
-                            <span class="gift" v-if="m.gift">{{ m.gift }}</span>{{ m.content }}
+                            <span class="gift" v-if="m.gift">{{ giftIcon(m.gift) }}</span>{{ m.content }}
+                        </div>
+                    </div>
+
+                    <div class="card" v-if="myCoBuilds.length">
+                        <h3>∞ 共建纪念林 <span class="muted" style="font-weight:400">别人来过，也留下了会一直存在的东西</span></h3>
+                        <div class="shared-build" v-for="gift in myCoBuilds" :key="gift.id">
+                            <span>{{ gift.emoji }}</span>
+                            <div><b>{{ gift.title }} · {{ gift.fromNickname }}</b><p>{{ gift.message }}</p></div>
+                            <time>{{ fmtTime(gift.createdAt) }}</time>
+                        </div>
+                    </div>
+
+                    <div class="card chronicle-card">
+                        <h3>⌁ 星球编年史
+                            <button class="btn-sm btn-ghost" @click="replayPrologue">✦ 重读序章</button>
+                        </h3>
+                        <p class="muted" v-if="!myChronicle.length">第一件大事正在发生。</p>
+                        <div class="chronicle" v-if="myChronicle.length">
+                            <article v-for="event in myChronicle" :key="event.at + event.title" :class="'event-' + event.type.toLowerCase()">
+                                <i>{{ event.icon }}</i>
+                                <div><time>{{ fmtTime(event.at) }}</time><b>{{ event.title }}</b><p>{{ event.detail }}</p></div>
+                            </article>
                         </div>
                     </div>
                 </template>
@@ -334,20 +453,20 @@
                         </div>
                         <div class="form-row">
                             <select v-model="habitForm.category" style="flex:1">
-                                <option value="STUDY">📚 学习 — 星球上长出图书馆</option>
-                                <option value="EXERCISE">🏃 运动 — 长出体育场</option>
-                                <option value="HEALTH">🌙 作息 — 长出灯塔</option>
-                                <option value="CREATE">🎨 创作 — 长出艺术宫</option>
-                                <option value="LIFE">🌱 生活 — 长出游乐园</option>
+                                <option value="STUDY">📚 学习 — 成长为大学城</option>
+                                <option value="EXERCISE">🏃 运动 — 成长为体育场</option>
+                                <option value="HEALTH">🌙 作息 — 成长为灯塔</option>
+                                <option value="CREATE">🎨 创作 — 成长为艺术宫</option>
+                                <option value="LIFE">🌱 生活 — 成长为游乐园</option>
                             </select>
                             <button @click="addHabit">创建</button>
                         </div>
-                        <p class="muted">打卡 +10 能量 +10 P ｜ 连续 7 天 +30 ｜ 连续 30 天 +100 ｜ 同类打卡越多，建筑越高级</p>
+                        <p class="muted">打卡 +10 能量 +10 P ｜ 连续 7 天 +30 ｜ 连续 30 天 +100 ｜ 同类打卡越多，档案里的分类建筑越高级</p>
                     </div>
 
                     <div class="card">
                         <h3>🔥 我的习惯</h3>
-                        <p class="muted" v-if="!habits.length">暂无习惯，创建一个让星球长出第一栋建筑吧</p>
+                        <p class="muted" v-if="!habits.length">暂无习惯，创建一个，同类打卡会在星球档案里成长为一栋建筑</p>
                         <div class="item-row" v-for="h in habits" :key="h.id">
                             <span class="title">{{ h.icon }} {{ h.name }}
                                 <span class="tag">{{ h.categoryTitle }}</span>
@@ -467,7 +586,7 @@
                     </div>
 
                     <div class="card world-store-card">
-                        <h3>◈ 盖亚改造计划 <span class="muted" style="font-weight:400">重走地球演化史：大气 → 海洋 → 生命 → 绿洲 → 生灵 → 文明</span></h3>
+                        <h3>◈ 盖亚改造计划 <span class="muted" style="font-weight:400">带星球重走演化史：大气 → 海洋 → 生命 → 绿色 → 动物 → 文明</span></h3>
                         <div class="world-store-grid" v-if="myPlanet">
                             <template v-for="g in shopEpochGroups" :key="g.epoch">
                                 <div class="epoch-head" :class="{locked: g.locked}">
@@ -576,6 +695,18 @@
                             <div class="form-row">
                                 <input type="text" v-model.trim="nudgeMessage" placeholder="附加一句话（可选）" style="flex:1">
                                 <span class="link" @click="unbindPartner" style="align-self:center;font-size:12px;color:var(--dim);cursor:pointer">解绑</span>
+                            </div>
+                        </div>
+
+                        <div class="card co-build-invite">
+                            <div>
+                                <small>BUILD TOGETHER</small>
+                                <h3>∞ 去 TA 的世界留下真实痕迹</h3>
+                                <p>共建物会带着你的署名永久留在地表，也会被写进 TA 的星球编年史。</p>
+                            </div>
+                            <div class="co-build-actions">
+                                <button class="btn-sm" @click="startCoBuild('TREE')">🌳 去种共生树</button>
+                                <button class="btn-sm btn-gold" @click="startCoBuild('LANTERN')">🏮 去点守望灯</button>
                             </div>
                         </div>
 

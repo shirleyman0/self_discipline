@@ -20,13 +20,15 @@ const BUILD_KINDS = new Set([
     'ROCKS', 'GARDEN', 'CAMP', 'FOREST', 'FOUNTAIN', 'CRYSTAL',
     'PAVILION', 'LAKE', 'CABIN', 'FARM', 'LIBRARY', 'CASTLE',
     'CRATER', 'ROVER', 'ATMOSPHERE', 'COMET', 'SPRING',
-    'SOUP', 'STROMA', 'MUSHROOM', 'SEEDVAULT', 'ARK', 'FIREFLY', 'OBSERVATORY'
+    'SOUP', 'STROMA', 'MUSHROOM', 'SEEDVAULT', 'ARK', 'FIREFLY', 'OBSERVATORY',
+    'GIFT_TREE', 'GIFT_LANTERN'
 ]);
 const FOOTPRINT = {
     ROCKS: 8, GARDEN: 11, CAMP: 11, FOREST: 22, FOUNTAIN: 12, CRYSTAL: 9,
     PAVILION: 15, LAKE: 25, CABIN: 17, FARM: 28, LIBRARY: 32, CASTLE: 44,
     CRATER: 14, ROVER: 7, ATMOSPHERE: 12, COMET: 12, SPRING: 12,
-    SOUP: 12, STROMA: 9, MUSHROOM: 10, SEEDVAULT: 16, ARK: 30, FIREFLY: 10, OBSERVATORY: 20
+    SOUP: 12, STROMA: 9, MUSHROOM: 10, SEEDVAULT: 16, ARK: 30, FIREFLY: 10, OBSERVATORY: 20,
+    GIFT_TREE: 6, GIFT_LANTERN: 4
 };
 // 与 PlanetService.placementRadius 保持一致：服务端按两个占地圆半径之和判重，
 // 前端预览也使用同一套半径，避免“预览可放、提交却失败”。
@@ -54,7 +56,9 @@ const PLACEMENT_RADIUS = {
     ROVER: 6,
     STROMA: 6,
     MUSHROOM: 6,
-    FIREFLY: 6
+    FIREFLY: 6,
+    GIFT_TREE: 4,
+    GIFT_LANTERN: 3
 };
 const BUILD_WORLD_LIMIT = 190;
 const TITLES = {
@@ -65,7 +69,8 @@ const TITLES = {
     CRATER: '静海环形山', ROVER: '月面探测车', ATMOSPHERE: '盖亚大气机',
     COMET: '引水彗星核', SPRING: '云雾温泉', SOUP: '原初生命池',
     STROMA: '叠层石群', MUSHROOM: '荧光蘑菇林', SEEDVAULT: '万物种子库',
-    ARK: '生命方舟', FIREFLY: '萤火之丘', OBSERVATORY: '星海天文台'
+    ARK: '生命方舟', FIREFLY: '萤火之丘', OBSERVATORY: '星海天文台',
+    GIFT_TREE: '共生树', GIFT_LANTERN: '守望灯'
 };
 const FLATTEN_BUILD_KINDS = new Set([
     'GARDEN', 'CAMP', 'FOUNTAIN', 'CRYSTAL', 'PAVILION', 'CABIN', 'FARM', 'LIBRARY', 'CASTLE',
@@ -79,7 +84,8 @@ const KIND_EPOCH = {
     SOUP: 3, STROMA: 3, MUSHROOM: 3,
     SEEDVAULT: 4, GARDEN: 4, FOREST: 4, FOUNTAIN: 4,
     ARK: 5, FIREFLY: 5,
-    CAMP: 6, PAVILION: 6, CABIN: 6, FARM: 6, LIBRARY: 6, OBSERVATORY: 6, CASTLE: 6
+    CAMP: 6, PAVILION: 6, CABIN: 6, FARM: 6, LIBRARY: 6, OBSERVATORY: 6, CASTLE: 6,
+    GIFT_TREE: 0, GIFT_LANTERN: 0
 };
 function epochOfObjects(objects) {
     let epoch = 0;
@@ -150,6 +156,11 @@ function mount(el, opts = {}) {
         const obj = normalizeObject(raw, i);
         if (obj) objectData.set(String(obj.id), obj);
     });
+    const epochCeiling = opts.epoch != null ? clamp(Math.round(Number(opts.epoch) || 0), 0, 6) : null;
+    const visibleEpoch = objects => {
+        const unlocked = epochOfObjects(objects);
+        return epochCeiling == null ? unlocked : Math.min(unlocked, epochCeiling);
+    };
 
     /* ---------- renderer / scene ---------- */
     const coarsePointer = typeof window.matchMedia === 'function'
@@ -330,14 +341,14 @@ function mount(el, opts = {}) {
         });
     }
 
-    /* ---------- 纪元环境（从月壤到盖亚） ----------
-     * stage 0 冥古宙：无大气——白天也是星空、灰色月壤、无云无水无树。
+    /* ---------- 纪元环境（从荒原到盖亚） ----------
+     * stage 0 洪荒纪：无大气——白天也是星空、灰色荒岩、无云无水无树。
      * stage 1 大气纪：天空第一次变蓝，云开始流动，星星在白天隐去。
      * stage 2 海洋纪：天然湖出现，低洼积水。
      * stage 3 生命纪：水边泛起苔藓绿。
      * stage 4 绿色纪：草原覆盖全球，森林随星球等级越来越密。
      * stage 5 动物纪：飞鸟、蝴蝶、游鱼与漫步的小兽。 */
-    let stage = epochOfObjects(objectData.values());
+    let stage = visibleEpoch(objectData.values());
     function envFor(s) {
         if (s < 1) {
             return { // 无大气：黑色太空 + 刺眼的白色阳光
@@ -1846,6 +1857,8 @@ function mount(el, opts = {}) {
             case 'ARK': makeArk(g); break;
             case 'FIREFLY': makeFirefly(g, obj); break;
             case 'OBSERVATORY': makeObservatory(g, obj); break;
+            case 'GIFT_TREE': makeSharedTree(g); break;
+            case 'GIFT_LANTERN': makeSharedLantern(g); break;
             default: return null;
         }
         g.position.set(obj.x, heightAt(obj.x, obj.z), obj.z);
@@ -1854,6 +1867,25 @@ function mount(el, opts = {}) {
         objectRoot.add(g);
         objectGroups.set(String(obj.id), g);
         return g;
+    }
+
+    /** 搭档留下的共建物不属于商店目录，但与普通建筑一样永久渲染并可点击看署名。 */
+    function makeSharedTree(g) {
+        block(g, 0, 2.8, 0, 1.15, 5.6, 1.15, 0x76523a);
+        block(g, 0, 6.2, 0, 4.8, 3.8, 4.8, 0x4da875, { rounded: true });
+        block(g, -1.9, 8.1, .4, 3.4, 2.9, 3.4, 0x65c888, { rounded: true });
+        block(g, 1.8, 8.2, -.3, 3.2, 2.8, 3.2, 0x5abb7d, { rounded: true });
+        const light = new THREE.PointLight(0x8fe0ae, 1.1, 18, 2);
+        light.position.set(0, 7, 0); g.add(light);
+    }
+    function makeSharedLantern(g) {
+        block(g, 0, 2.5, 0, .55, 5, .55, 0x4d3e38);
+        block(g, 0, 5.4, 0, 2.4, .35, 2.4, 0x5d493e);
+        block(g, 0, 6.4, 0, 1.85, 2.1, 1.85, 0xffc56c,
+            { opacity: .9, emissive: 0xff9d3c, emissiveIntensity: 1.45, rounded: true });
+        block(g, 0, 7.6, 0, 2.5, .35, 2.5, 0x5d493e);
+        const light = new THREE.PointLight(0xffbd68, 2.1, 24, 2);
+        light.position.set(0, 6.4, 0); g.add(light);
     }
     function removeVisualObject(id) {
         const key = String(id);
@@ -2675,7 +2707,7 @@ function mount(el, opts = {}) {
             const previousTerrain = previous.kind === 'LAKE' || FLATTEN_BUILD_KINDS.has(previous.kind);
             removeVisualObject(key);
             objectData.set(key, obj);
-            const nextStage = epochOfObjects(objectData.values());
+            const nextStage = visibleEpoch(objectData.values());
             if (nextStage !== stage) { applyStage(nextStage); return { ...obj }; }
             refreshTerrainModifiers();
             if (previousTerrain || obj.kind === 'LAKE' || FLATTEN_BUILD_KINDS.has(obj.kind)) {
@@ -2688,7 +2720,7 @@ function mount(el, opts = {}) {
             }
         }
         objectData.set(key, obj);
-        const nextStage = epochOfObjects(objectData.values());
+        const nextStage = visibleEpoch(objectData.values());
         if (nextStage !== stage) {
             // 里程碑落成：天空变色 / 降雨 / 苔藓蔓延 / 森林生长 / 生灵到来
             applyStage(nextStage);
@@ -2714,7 +2746,7 @@ function mount(el, opts = {}) {
         if (!obj) return false;
         removeVisualObject(key);
         objectData.delete(key);
-        const nextStage = epochOfObjects(objectData.values());
+        const nextStage = visibleEpoch(objectData.values());
         if (nextStage !== stage) { applyStage(nextStage, { animate: false }); return true; }
         refreshTerrainModifiers();
         refreshNatureVisibility();
@@ -2782,7 +2814,7 @@ function mount(el, opts = {}) {
             const obj = normalizeObject(raw, i);
             if (obj) objectData.set(String(obj.id), obj);
         });
-        const nextStage = epochOfObjects(objectData.values());
+        const nextStage = visibleEpoch(objectData.values());
         if (nextStage !== stage) { applyStage(nextStage, { animate: false }); return objectData.size; }
         refreshTerrainModifiers();
         rebuildTerrain();

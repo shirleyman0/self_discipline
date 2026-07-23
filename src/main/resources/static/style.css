@@ -681,6 +681,15 @@ body.auth-body { overflow: auto; }
     animation: alertGlow 2.6s ease-in-out infinite;
     backdrop-filter: blur(8px);
 }
+.regression-chip {
+    position:absolute;top:72px;left:50%;z-index:5;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:2px;min-width:290px;
+    padding:9px 16px;border:1px solid rgba(224,174,88,.58);border-radius:8px;
+    background:rgba(54,40,25,.82);color:#ffe0a3;backdrop-filter:blur(10px);cursor:pointer;
+    box-shadow:0 8px 24px rgba(10,7,4,.35);
+}
+.regression-chip b { font-size:12px; }
+.regression-chip span { color:#d4c09d;font-size:10px; }
 @keyframes alertGlow {
     0%, 100% { box-shadow: 0 0 0 rgba(255, 107, 129, 0); }
     50% { box-shadow: 0 0 20px rgba(255, 107, 129, .3); }
@@ -969,7 +978,98 @@ select option { background: var(--card-solid); }
 .tier-orb.t6 { background: radial-gradient(circle at 32% 30%, #7bed9f, #2eae70 50%, #145a3d); }
 .tier-orb.t7 { background: radial-gradient(circle at 32% 30%, #c4b5fd, #7c5cd8 55%, #33206e); }
 .tier-orb.t8 { background: radial-gradient(circle at 35% 32%, #fff3c4, #ffd166 45%, #ff8f3d 80%); box-shadow: 0 0 10px rgba(255, 190, 80, .75), inset -2px -2px 4px rgba(120, 40, 0, .4); }
+/* 纪元小圆点：与首页星球的 7 个纪元外观对应（洪荒→大气→海洋→生命→绿色→动物→文明） */
+.tier-orb.e0 { background:radial-gradient(circle at 32% 30%,#c2c9dd,#8c94ad 55%,#4f5670);box-shadow:inset -2px -2px 4px rgba(4,8,24,.5),0 0 11px rgba(170,180,216,.68); }
+.tier-orb.e1 { background: radial-gradient(circle at 32% 30%, #c3b499, #8a7860 55%, #4a4034); box-shadow: inset -2px -2px 4px rgba(4, 8, 24, .5), 0 0 9px rgba(111, 180, 230, .55); }
+.tier-orb.e2 { background: radial-gradient(circle at 32% 30%, #6edcff, #1f74cf 52%, #0a2f66); }
+.tier-orb.e3 { background: radial-gradient(circle at 32% 30%, #8fe6c0, #2f9ad4 55%, #0a2f66); }
+.tier-orb.e4 { background: radial-gradient(circle at 32% 30%, #7bed9f, #2eae70 50%, #145a3d); }
+.tier-orb.e5 { background: radial-gradient(circle at 32% 30%, #7bed9f, #2eae70 50%, #145a3d); box-shadow: inset -2px -2px 4px rgba(4, 8, 24, .5), 0 0 9px rgba(200, 220, 255, .6); }
+.tier-orb.e6 { background: radial-gradient(circle at 32% 30%, #8ff0c8, #2f955a 52%, #237a48); box-shadow: inset -2px -2px 4px rgba(4, 8, 24, .5), 0 0 9px rgba(255, 210, 120, .7); }
+.tier-orb.e7 { background:radial-gradient(circle at 34% 30%,#fffbe1,#ffd166 36%,#ef7e3b 70%,#79312d);box-shadow:0 0 14px rgba(255,196,92,.88),inset -2px -2px 4px rgba(110,35,20,.45); }
 .tier-step:not(.past):not(.now) .tier-orb { filter: grayscale(.7) brightness(.62); }
+.tier-step:has(+ .tier-step.now),.tier-step.now { transition:background .2s,border-color .2s; }
+
+/* 星灵：3D 实体旁的短回应与档案状态。 */
+.spirit-callout {
+    position:absolute;right:-38px;bottom:118px;z-index:4;width:196px;padding:9px 11px;
+    border:1px solid rgba(156,230,205,.48);border-radius:8px;background:rgba(7,18,27,.82);
+    backdrop-filter:blur(10px);pointer-events:none;box-shadow:0 9px 28px rgba(2,8,12,.42);
+}
+.spirit-callout::before { content:"";position:absolute;left:-7px;bottom:15px;width:12px;height:12px;background:inherit;border-left:1px solid rgba(156,230,205,.48);border-bottom:1px solid rgba(156,230,205,.48);transform:rotate(45deg); }
+.spirit-callout b,.spirit-callout span { display:block;letter-spacing:0; }
+.spirit-callout b { color:#9ce6cd;font-size:11px;margin-bottom:3px; }
+.spirit-callout span { color:#d7e7e2;font-size:10px;line-height:1.55; }
+.spirit-callout.mood-SCARED { border-color:rgba(239,167,117,.55); }
+.spirit-callout.mood-SCARED b { color:#f1b37f; }
+.spirit-card { display:grid;grid-template-columns:92px minmax(0,1fr);gap:16px;align-items:center;overflow:hidden; }
+.spirit-portrait { position:relative;width:84px;height:84px;border-radius:50%;background:radial-gradient(circle at 50% 48%,rgba(92,196,157,.22),rgba(15,45,54,.35) 58%,transparent 59%); }
+.spirit-portrait::before { content:"";position:absolute;left:24px;top:25px;width:38px;height:40px;border-radius:52% 52% 46% 46%;background:#8bd8b7;box-shadow:inset -8px -6px 0 rgba(29,110,102,.2),0 0 18px rgba(87,230,213,.3); }
+.spirit-portrait::after { content:"";position:absolute;left:33px;top:39px;width:5px;height:7px;border-radius:50%;background:#173949;box-shadow:15px 0 #173949; }
+.spirit-portrait>i { position:absolute;top:17px;width:19px;height:27px;border-radius:70% 15% 70% 20%;background:#72cfa0;z-index:0; }
+.spirit-portrait>i:first-child { left:19px;transform:rotate(-28deg); }
+.spirit-portrait>i:nth-child(2) { right:18px;transform:scaleX(-1) rotate(-28deg); }
+.spirit-portrait>span { position:absolute;right:4px;top:5px;color:#ffd166;text-shadow:0 0 9px #ffd166;animation:spiritSpark 2.2s ease-in-out infinite; }
+.spirit-portrait.stage-0::before { width:32px;height:32px;left:27px;top:30px;border-radius:50%;background:#9b8f78; }
+.spirit-portrait.stage-0>i { display:none; }
+.spirit-portrait.mood-SCARED::before { transform:scaleY(.72) translateY(12px);filter:saturate(.45);animation:spiritTremble .16s linear infinite; }
+.spirit-portrait.mood-HAPPY::before,.spirit-portrait.mood-ECSTATIC::before { animation:spiritBounce 1.15s ease-in-out infinite; }
+.spirit-copy small,.stellar-head small { color:#78c9b6;font:9px "SF Mono",Menlo,monospace;letter-spacing:1.4px; }
+.spirit-copy h3 { margin:4px 0 6px; }
+.spirit-copy p { color:#dce9e5;font-size:12px;line-height:1.65;margin-bottom:8px; }
+.spirit-streak { color:#ffd98d;font-size:10.5px; }
+@keyframes spiritBounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+@keyframes spiritTremble { 0%,100%{margin-left:0} 50%{margin-left:2px} }
+@keyframes spiritSpark { 0%,100%{opacity:.45;transform:scale(.8)} 50%{opacity:1;transform:scale(1.15)} }
+
+.recovery-card { display:grid;grid-template-columns:48px minmax(0,1fr);gap:12px;border-color:rgba(224,174,88,.4);background:rgba(82,55,27,.24); }
+.recovery-mark { width:42px;height:42px;display:grid;place-items:center;border-radius:50%;background:rgba(255,193,91,.12);color:#ffd58a;font-size:25px; }
+.recovery-card h3 { color:#ffe0a3;margin-bottom:5px; }
+.recovery-card p { color:#d8c8ad;font-size:12px;line-height:1.65;margin-bottom:10px; }
+
+/* 恒星纪和双星辉映。 */
+.stellar-card { border-color:rgba(255,190,86,.34);background:linear-gradient(145deg,rgba(34,27,47,.88),rgba(25,52,56,.72)); }
+.stellar-head { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px; }
+.stellar-head h3 { color:#ffe3a0;margin:3px 0 0; }
+.stellar-head>b { color:#9ce6cd;font-size:11px;padding:5px 8px;border:1px solid rgba(103,211,186,.32);border-radius:6px; }
+.binary-system { position:relative;height:116px;margin:10px 0 6px;display:flex;align-items:center;justify-content:space-around;overflow:hidden; }
+.system-line { position:absolute;left:27%;right:27%;top:49px;height:1px;background:rgba(154,170,195,.25); }
+.binary-system.linked .system-line { background:#ffd166;box-shadow:0 0 12px #ffd166; }
+.system-star { position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;color:#b9c6d0;font-size:10px; }
+.system-star>i { display:block;width:52px;height:52px;border-radius:50%;background:radial-gradient(circle at 34% 31%,#fffbd9,#ffc75b 42%,#dd633c 77%);box-shadow:0 0 22px rgba(255,184,71,.58); }
+.system-star.partner>i { width:38px;height:38px;background:radial-gradient(circle at 34% 31%,#b4ead3,#4aa8a2 50%,#315975);box-shadow:0 0 14px rgba(91,207,189,.42); }
+.binary-system:not(.linked) .system-star.partner { opacity:.42; }
+.radiance-track { height:7px;border:1px solid rgba(255,209,102,.26);background:rgba(5,9,22,.55);overflow:hidden;border-radius:4px;margin:10px 0 5px; }
+.radiance-track i { display:block;height:100%;background:linear-gradient(90deg,#55cfaa,#ffd166,#f37a55);box-shadow:0 0 10px #ffd166;transition:width .5s; }
+
+.shared-build { display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:9px;align-items:start;padding:9px 0;border-bottom:1px solid rgba(120,140,220,.13); }
+.shared-build:last-child { border-bottom:0; }
+.shared-build>span { font-size:25px; }
+.shared-build b { color:#dce9e5;font-size:12px; }
+.shared-build p { color:#9da9b7;font-size:11px;line-height:1.55;margin-top:2px; }
+.shared-build time,.chronicle time { color:#71808f;font:9px "SF Mono",Menlo,monospace;white-space:nowrap; }
+.chronicle { position:relative;padding-left:7px; }
+.chronicle::before { content:"";position:absolute;left:17px;top:9px;bottom:10px;width:1px;background:linear-gradient(#62cfb2,#deb05c,#485869); }
+.chronicle article { position:relative;display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;padding:0 0 17px; }
+.chronicle article>i { position:relative;z-index:1;width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:#13252d;border:1px solid #5ab99f;color:#89e0c1;font-style:normal;font-size:10px; }
+.chronicle article>div { display:grid;gap:2px; }
+.chronicle article b { color:#e5ebe9;font-size:12px; }
+.chronicle article p { color:#929fad;font-size:11px;line-height:1.55; }
+.chronicle .event-desert>i { border-color:#d49b55;color:#f2c37d;background:#34291e; }
+
+.gift-pick button { padding:5px 9px;border-radius:6px;background:rgba(255,255,255,.05);color:#c9d5d6;box-shadow:inset 0 0 0 1px rgba(133,159,170,.23);font-size:11px;white-space:nowrap; }
+.gift-pick button.sel { color:#1c281f;background:#ffd58a;box-shadow:0 0 14px rgba(255,201,103,.32); }
+.gift-pick button:hover:not(:disabled) { transform:translateY(-1px); }
+
+/* 分类建筑（习惯打卡累计成长，档案面板） */
+.cat-build-grid { display: flex; flex-direction: column; gap: 8px; }
+.cat-build { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-radius: 10px; background: rgba(120, 140, 220, .06); border: 1px solid var(--border); }
+.cat-build .cb-emoji { font-size: 26px; line-height: 1; flex-shrink: 0; width: 32px; text-align: center; }
+.cat-build .cb-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cat-build .cb-info b { font-size: 14px; color: var(--text); }
+.cat-build .cb-info .muted { font-size: 12px; }
+.cat-build .cb-stars i { font-style: normal; color: #3a4a63; font-size: 12px; margin-right: 1px; }
+.cat-build .cb-stars i.on { color: #ffd166; text-shadow: 0 0 8px rgba(255, 200, 90, .6); }
 
 /* 番茄钟环 */
 .pomodoro { text-align: center; padding: 14px 10px 20px; }
@@ -1056,9 +1156,11 @@ select option { background: var(--card-solid); }
 .msg-item .m-head { display: flex; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 4px; }
 .msg-item .gift { font-size: 18px; margin-right: 6px; }
 .gift-pick { display: flex; gap: 6px; }
-.gift-pick span { font-size: 20px; cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: transform .12s, background .12s; }
-.gift-pick span:hover { transform: scale(1.25); }
-.gift-pick span.sel { background: rgba(255, 209, 102, .2); outline: 1px solid rgba(255, 209, 102, .5); }
+.co-build-invite { display:flex;align-items:center;justify-content:space-between;gap:16px;border-color:rgba(102,201,161,.34); }
+.co-build-invite small { color:#72cfa0;font:9px "SF Mono",Menlo,monospace;letter-spacing:1.3px; }
+.co-build-invite h3 { margin:4px 0 5px; }
+.co-build-invite p { color:var(--dim);font-size:11px;line-height:1.55; }
+.co-build-actions { display:flex;flex-direction:column;gap:7px;flex:none; }
 
 /* 成就 & 流水 */
 .achv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 9px; }
@@ -1124,6 +1226,10 @@ textarea { width: 100%; min-height: 100px; resize: vertical; }
 .auth-tabs button { flex: 1; }
 .auth-tabs button:not(.active-preset) { background: transparent; color: var(--dim); box-shadow: inset 0 0 0 1px var(--border); }
 .auth-card input { width: 100%; margin-bottom: 13px; }
+.email-code-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 9px; align-items: start; }
+.email-code-row input { min-width: 0; }
+.btn-send-code { height: 42px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
+.auth-success { color: var(--cyan); font-size: 12.5px; margin-bottom: 10px; }
 .auth-error { color: var(--coral); font-size: 12.5px; margin-bottom: 10px; }
 .btn-primary { width: 100%; padding: 12px; font-size: 15px; }
 
@@ -1131,6 +1237,8 @@ textarea { width: 100%; min-height: 100px; resize: vertical; }
 @media (max-width: 760px) {
     body:not(.auth-body) { overflow: hidden; }
     .planet-stage { transform: translate(-50%, -50%) scale(.62); }
+    .spirit-callout { right:-96px;bottom:106px;width:180px; }
+    .regression-chip { top:82px;min-width:250px; }
     .hud-tl { width: 200px; padding: 10px 14px; }
     .hud-tr { display: none; }
     .grid-2, .stat-chips { grid-template-columns: 1fr; }
@@ -1171,6 +1279,12 @@ textarea { width: 100%; min-height: 100px; resize: vertical; }
     .blueprint { min-height:140px;padding:10px; }
     .liftoff-btn { top:auto!important;right:12px!important;bottom:16px!important; }
     .panel { width:100vw; }
+    .spirit-card { grid-template-columns:72px minmax(0,1fr); }
+    .spirit-portrait { width:68px;height:68px;transform:scale(.8);transform-origin:left center; }
+    .co-build-invite { align-items:flex-start;flex-direction:column; }
+    .co-build-actions { width:100%;flex-direction:row; }
+    .co-build-actions button { flex:1; }
+    .gift-pick { max-width:48vw;overflow-x:auto; }
     .place-bar { left:50%!important;bottom:126px!important;width:min(88vw,420px);display:flex;align-items:center;gap:10px;text-align:left; }
     .place-copy { flex:1;line-height:1.5; }
     .place-cancel { display:inline-flex;align-items:center;justify-content:center;flex:none;padding:7px 12px;border-radius:8px;background:rgba(255,255,255,.08);color:#dff8ff;box-shadow:inset 0 0 0 1px rgba(120,220,255,.35); }
@@ -1182,4 +1296,26 @@ textarea { width: 100%; min-height: 100px; resize: vertical; }
     .mobile-joystick span { position:absolute;left:0;right:0;bottom:-20px;text-align:center;font:9px "SF Mono";letter-spacing:2px;color:#b5d8e8; }
     .desktop-controls { display:none; }
     .touch-controls { display:inline; }
+}
+
+/* ===== 序章:星球起源(首次进入播放,编年史可重读) ===== */
+.prologue { position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(circle at 50% 36%,rgba(26,42,88,.88),rgba(2,5,16,.97) 70%);backdrop-filter:blur(14px);animation:fadeInSlow .6s ease both; }
+.prologue-skip { position:absolute;top:22px;right:26px;padding:7px 13px;background:transparent;border:1px solid rgba(139,148,198,.35);border-radius:8px;color:#8b94c6;font-size:11px;letter-spacing:2px;box-shadow:none; }
+.prologue-skip:hover { color:#dfe7ff;border-color:rgba(139,148,198,.7);transform:none; }
+.prologue-card { width:min(560px,92vw);text-align:center;padding:44px 38px 34px;background:linear-gradient(160deg,rgba(16,24,58,.92),rgba(8,13,34,.94));border:1px solid rgba(120,140,220,.28);border-radius:18px;box-shadow:0 30px 90px rgba(0,0,0,.6),inset 0 1px rgba(255,255,255,.07);animation:prologueRise .55s cubic-bezier(.2,.9,.3,1) both; }
+.prologue-card small { display:block;font:9.5px "SF Mono",Menlo,monospace;letter-spacing:5px;color:#78c9b6;margin-bottom:18px; }
+.prologue-icon { display:block;font-size:44px;line-height:1;margin-bottom:14px;filter:drop-shadow(0 0 18px rgba(87,230,213,.45)); }
+.prologue-card h2 { font-size:22px;letter-spacing:6px;color:#eef3ff;margin-bottom:16px; }
+.prologue-card p { color:rgba(214,224,255,.82);font-size:13.5px;line-height:2;max-width:440px;margin:0 auto 10px; }
+.prologue-dots { display:flex;justify-content:center;gap:9px;margin:22px 0 20px; }
+.prologue-dots i { width:7px;height:7px;border-radius:50%;background:rgba(120,140,220,.25);transition:all .3s; }
+.prologue-dots i.on { background:#57e6d5;box-shadow:0 0 8px rgba(87,230,213,.8); }
+.prologue-next { min-width:200px;padding:11px 26px;font-size:13px;letter-spacing:2px; }
+@keyframes prologueRise { from { opacity:0;transform:translateY(26px) scale(.97); } to { opacity:1;transform:none; } }
+@media (max-width:760px) {
+    .prologue { padding:16px; }
+    .prologue-card { padding:30px 20px 24px; }
+    .prologue-card h2 { font-size:19px;letter-spacing:3px; }
+    .prologue-card p { font-size:12.5px;line-height:1.9; }
+    .prologue-skip { top:14px;right:14px; }
 }

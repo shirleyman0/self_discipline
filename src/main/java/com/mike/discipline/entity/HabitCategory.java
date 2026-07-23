@@ -2,7 +2,7 @@ package com.mike.discipline.entity;
 
 import lombok.Getter;
 
-/** 习惯分类：决定星球上长出什么建筑 */
+/** 习惯分类：决定星球档案里成长为哪种分类建筑 */
 @Getter
 public enum HabitCategory {
 

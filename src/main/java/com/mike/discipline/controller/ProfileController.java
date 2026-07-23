@@ -65,6 +65,7 @@ public class ProfileController {
 
         Map<String, Object> result = new HashMap<>();
         result.put("username", user.getUsername());
+        result.put("email", user.getEmail());
         result.put("nickname", user.getNickname());
         result.put("xp", user.getXp());
         result.put("points", user.getPoints());

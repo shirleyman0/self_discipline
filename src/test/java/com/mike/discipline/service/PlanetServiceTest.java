@@ -1,6 +1,8 @@
 package com.mike.discipline.service;
 
 import com.mike.discipline.entity.User;
+import com.mike.discipline.entity.PointKind;
+import com.mike.discipline.entity.PointLog;
 import com.mike.discipline.entity.WorldItem;
 import com.mike.discipline.entity.WorldObject;
 import com.mike.discipline.exception.ApiException;
@@ -10,6 +12,7 @@ import com.mike.discipline.repository.HabitRepository;
 import com.mike.discipline.repository.PlanetDecorationRepository;
 import com.mike.discipline.repository.PlanetMessageRepository;
 import com.mike.discipline.repository.PointLogRepository;
+import com.mike.discipline.repository.ReviewRepository;
 import com.mike.discipline.repository.UserRepository;
 import com.mike.discipline.repository.WorldObjectRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -53,6 +57,8 @@ class PlanetServiceTest {
     private GamificationService gamificationService;
     @Mock
     private WorldObjectRepository worldObjectRepository;
+    @Mock
+    private ReviewRepository reviewRepository;
 
     private PlanetService planetService;
 
@@ -60,7 +66,7 @@ class PlanetServiceTest {
     void setUp() {
         planetService = new PlanetService(userRepository, habitRepository, checkinRepository,
                 pointLogRepository, focusRepository, messageRepository, decorationRepository,
-                gamificationService, worldObjectRepository);
+                gamificationService, worldObjectRepository, reviewRepository);
     }
 
     @Test
@@ -128,6 +134,102 @@ class PlanetServiceTest {
         assertEquals(1.0, captor.getValue().getZ());
     }
 
+    @Test
+    void longDesertTemporarilyRegressesMainlineWithoutDeletingUnlocks() {
+        assertEquals(4, PlanetService.effectiveEpoch(5, 4));
+        assertEquals(3, PlanetService.effectiveEpoch(5, 6));
+        assertEquals(5, PlanetService.effectiveEpoch(5, 0));
+        assertEquals(0, PlanetService.effectiveEpoch(1, 7));
+    }
+
+    @Test
+    void desertRegressionBlocksLateEpochConstructionUntilRecovery() {
+        User user = user(1L, 5_000);
+        WorldObject ark = worldObject(9L, WorldItem.ARK, -100.0, -100.0);
+        when(userRepository.findForUpdateById(1L)).thenReturn(Optional.of(user));
+        when(worldObjectRepository.findByUserIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(ark));
+        when(pointLogRepository.findByUserIdAndCreatedAtBetween(any(), any(), any()))
+                .thenReturn(List.of(punish(0), punish(1), punish(2), punish(3)));
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> planetService.buildWorldObject(1L, "OBSERVATORY", 30.0, 30.0));
+
+        assertEquals("「星海天文台」尚未解锁，星球正在荒漠化，恢复打卡或写复盘后才能继续推进主线",
+                error.getMessage());
+        verify(gamificationService, never()).redeem(any(), anyLong(), any());
+    }
+
+    @Test
+    void sharedBuildGiftIsPersistedOnPartnerPlanetWithSignature() {
+        User me = user(1L, 0);
+        me.setNickname("Mike");
+        me.setPartnerId(2L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(me));
+
+        planetService.leaveMessage(1L, "一起长大", "tree");
+
+        ArgumentCaptor<com.mike.discipline.entity.PlanetMessage> captor =
+                ArgumentCaptor.forClass(com.mike.discipline.entity.PlanetMessage.class);
+        verify(messageRepository).save(captor.capture());
+        assertEquals(2L, captor.getValue().getOwnerId());
+        assertEquals("Mike", captor.getValue().getFromNickname());
+        assertEquals("TREE", captor.getValue().getGift());
+        assertEquals("一起长大", captor.getValue().getContent());
+    }
+
+    @Test
+    void sharedBuildRejectsNonPhysicalLegacyGift() {
+        User me = user(1L, 0);
+        me.setNickname("Mike");
+        me.setPartnerId(2L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(me));
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> planetService.leaveMessage(1L, "礼物", "coffee"));
+
+        assertEquals("只能留下共生树或守望灯", error.getMessage());
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void stellarEraResidentShowsLanternSpiritFormWithoutBreakingStage() {
+        // 方舟解锁文明纪,天文台点亮恒星纪(displayEpoch=7),星灵应显示恒星纪形态。
+        User user = user(1L, 0);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(worldObjectRepository.findByUserIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(
+                worldObject(9L, WorldItem.ARK, -100.0, -100.0),
+                worldObject(10L, WorldItem.OBSERVATORY, 60.0, 60.0)));
+
+        var planet = planetService.myPlanet(1L);
+
+        assertEquals(7, planet.get("displayEpoch"));
+        @SuppressWarnings("unchecked")
+        var resident = (java.util.Map<String, Object>) planet.get("resident");
+        assertEquals("执灯星灵", resident.get("form"));
+        // stage 仍按 0..6 输出,前端 spirit-portrait / 3D 星灵造型不受影响。
+        assertEquals(6, resident.get("stage"));
+    }
+
+    @Test
+    void desertRegressionHidesStellarFormUntilRecovery() {
+        // 恒星纪星球荒漠化暂退时,星灵回落为暂退纪元的形态,而不是执灯星灵。
+        User user = user(1L, 0);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(worldObjectRepository.findByUserIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(
+                worldObject(9L, WorldItem.ARK, -100.0, -100.0),
+                worldObject(10L, WorldItem.OBSERVATORY, 60.0, 60.0)));
+        when(pointLogRepository.findByUserIdAndCreatedAtBetween(any(), any(), any()))
+                .thenReturn(List.of(punish(0), punish(1), punish(2), punish(3)));
+
+        var planet = planetService.myPlanet(1L);
+
+        // failStreak=4 → 暂退 1 纪元:6(文明纪) → 5(动物纪)。
+        assertEquals(5, planet.get("displayEpoch"));
+        @SuppressWarnings("unchecked")
+        var resident = (java.util.Map<String, Object>) planet.get("resident");
+        assertEquals("星野伙伴", resident.get("form"));
+    }
+
     private User user(Long id, long points) {
         User user = new User();
         user.setId(id);
@@ -143,5 +245,12 @@ class PlanetServiceTest {
         object.setX(x);
         object.setZ(z);
         return object;
+    }
+
+    private PointLog punish(int daysAgo) {
+        PointLog log = new PointLog();
+        log.setKind(PointKind.PUNISH);
+        log.setCreatedAt(LocalDate.now().minusDays(daysAgo).atTime(8, 0));
+        return log;
     }
 }
